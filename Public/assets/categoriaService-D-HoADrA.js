@@ -1,0 +1,1 @@
+import{h as e}from"./http-D7QaMEIz.js";const r={getAll(t){return e.post("/categoria/getallcategoria",t)},create(t){return e.post("/categoria/newcategoria",t)},getById(t){return e.post("/categoria/getidcategoria",t)},update(t){return e.put("/categoria/updatecategoria",t)}};export{r as c};

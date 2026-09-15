@@ -1,0 +1,1 @@
+import{E as n}from"./EnConstruccion-CwHOHI1P.js";import{_ as t,c as s,r as c,o as e}from"./index-CLg7PX4c.js";const r={name:"Ventas",components:{EnConstruccion:n}};function a(p,_,i,m,u,f){const o=c("EnConstruccion");return e(),s(o,{titulo:"Ventas"})}const C=t(r,[["render",a]]);export{C as default};

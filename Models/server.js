@@ -16,6 +16,7 @@ import producto from '../Routes/productos.js'
 import articulo from '../Routes/articulos.js';
 import existencia from '../Routes/existencias.js';
 import movimiento from '../Routes/movimientos.js';
+import produccion from '../Routes/ordenesProduccion.js';
 
 class Server{
     constructor(){
@@ -78,6 +79,7 @@ class Server{
         this.app.use('/api/articulo',articulo);
         this.app.use('/api/existencia',existencia);
         this.app.use('/api/movimiento',movimiento);
+        this.app.use('/api/produccion',produccion);
     }
 
     listen(){

@@ -15,6 +15,7 @@ import tiposProducto from '../Routes/tiposProducto.js';
 import producto from '../Routes/productos.js'
 import articulo from '../Routes/articulos.js';
 import existencia from '../Routes/existencias.js';
+import movimiento from '../Routes/movimientos.js';
 
 class Server{
     constructor(){
@@ -76,6 +77,7 @@ class Server{
         this.app.use('/api/producto',producto);
         this.app.use('/api/articulo',articulo);
         this.app.use('/api/existencia',existencia);
+        this.app.use('/api/movimiento',movimiento);
     }
 
     listen(){

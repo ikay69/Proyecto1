@@ -1,0 +1,1 @@
+import{h as e}from"./http-D7QaMEIz.js";const i={getAll(d){return e.post("/unidadMedida/getunidadesmedida",d)},create(d){return e.post("/unidadMedida/newunidadmedida",d)},getById(d){return e.post("/unidadMedida/getidunidadesmedida",d)},update(d){return e.put("/unidadMedida/updateunidadmedida",d)}};export{i as u};

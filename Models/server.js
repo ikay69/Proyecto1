@@ -11,6 +11,8 @@ import categoria from '../Routes/categorias.js';
 import tipoDocumento from '../Routes/tiposDocumento.js';
 import tercero from '../Routes/terceros.js';
 import propiedad from '../Routes/propiedades.js';
+import tiposProducto from '../Routes/tiposProducto.js';
+import producto from '../Routes/productos.js'
 
 class Server{
     constructor(){
@@ -26,8 +28,34 @@ class Server{
     }
 
     middlewares(){
-        this.app.use(express.json());   
-        this.app.use(cors());           
+        this.app.use(express.json());
+        
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://localhost:5173',     // Para cuando pruebas en tu propia máquina
+            'http://127.0.0.1:5173',     // Alternativa local
+            'http://192.168.1.5:5173'    // El frontend del otro portátil en tu red
+        ];
+
+
+
+        this.app.use(cors({
+            origin: function (origin, callback) {
+                // Permitir peticiones sin origen (como Postman, dispositivos móviles o SSR)
+                if (!origin) return callback(null, true);
+                
+                if (allowedOrigins.includes(origin)) {
+                    callback(null, true); // Origen permitido
+                } else {
+                    callback(new Error('Bloqueado por políticas de CORS de la API'));
+                }
+            },
+            methods: ['GET', 'POST', 'PUT', 'DELETE'],
+            credentials: true
+        }));           
+
+
+        //this.app.use(cors());
         this.app.use(express.static('public')); 
 
     }
@@ -42,6 +70,8 @@ class Server{
         this.app.use('/api/tipodocumento',tipoDocumento);
         this.app.use('/api/tercero',tercero);
         this.app.use('/api/propiedad',propiedad);
+        this.app.use('/api/tiposproducto',tiposProducto);
+        this.app.use('/api/producto',producto);
     }
 
     listen(){

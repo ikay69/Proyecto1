@@ -6,9 +6,9 @@ import { body } from "express-validator";
 const undMedValidaNombreSimbolo = async (req,res,next)=>{
 
     const {Nombre,Simbolo} = req.body;
-
+   
     var vNombre = String(Nombre ?? '').trim();
-    var vSimbolo = String(Apellidos ?? '').trim();
+    var vSimbolo = String(Simbolo ?? '').trim();
 
     vNombre = vNombre.toUpperCase().trim();
     vSimbolo = Simbolo.trim();

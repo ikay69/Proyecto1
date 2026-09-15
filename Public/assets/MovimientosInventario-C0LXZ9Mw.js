@@ -1,0 +1,1 @@
+import{E as n}from"./EnConstruccion-CwHOHI1P.js";import{_ as t,c as e,r as s,o as c}from"./index-CLg7PX4c.js";const r={name:"MovimientosInventario",components:{EnConstruccion:n}};function i(a,m,p,_,u,f){const o=s("EnConstruccion");return c(),e(o,{titulo:"Movimientos de inventario"})}const l=t(r,[["render",i]]);export{l as default};

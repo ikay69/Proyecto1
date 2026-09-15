@@ -1,29 +1,28 @@
 import { pool } from '../Database/config.js';
 
-const Propiedades = {
-    //crear propiedad
-    async crear({pEmpId,pUsuIdCrea,pNombre,pTipoDato}){
+const TiposProducto = {
+    //crear tipo de producto
+    async crear({pEmpId,pUsuIdCrea,pNombre}){
         const [rows] = await pool.query(
-            `INSERT INTO Propiedades(
+            `INSERT INTO TiposProductos(
                 EmpresaId,
                 UsuarioIdCreador,
-                Nombre,
-                TipoDato)
-            VALUES(?,?,?,?)`,
-            [pEmpId,pUsuIdCrea,pNombre,pTipoDato]
+                Nombre)
+            VALUES(?,?,?)`,
+            [pEmpId,pUsuIdCrea,pNombre]
         );
 
         return rows.insertId;
     },
 
-    async editar({pEmpId,pId,pNombre,pTipoDato,pEstado}){
+    //TiposProductos no maneja columna Estado, por eso editar solo actualiza Nombre
+    async editar({pEmpId,pId,pNombre,pEstado}){
         const [rows] = await pool.query(
-            `UPDATE Propiedades SET
+            `UPDATE TiposProductos SET
                 Nombre = ?,
-                TipoDato = ?,
                 Estado = ?
             WHERE EmpresaId = ? AND Id = ?;`,
-            [pNombre,pTipoDato,pEstado,pEmpId,pId]
+            [pNombre,pEstado,pEmpId,pId]
         );
 
         return rows.affectedRows;
@@ -34,17 +33,15 @@ const Propiedades = {
         if(pTexto === '%%'){
             const [rows] = await pool.query(
                 `SELECT 
-                    p.Id as proId,
-                    p.EmpresaId as proEmp,
-                    p.Nombre as proNombre,
-                    p.TipoDato as proTipoDato,
-                    p.Estado as proEstado,
-                    p.FechaCreacion as proFecCreacon,
-                    u.Nombres as proUsuario
-                FROM Propiedades p
-                LEFT JOIN Usuarios u on p.UsuarioIdCreador = u.Id
-                    WHERE p.EmpresaId = ?
-                    ORDER BY p.${pCampoOrden} ${pOrden}
+                    tp.Id as tipProId,
+                    tp.EmpresaId as tipProEmp,
+                    tp.Nombre as tipDocNombre,
+                    tp.Estado as tipDocEstado,
+                    tp.FechaCreacion as tipDocFecCreacion,
+                FROM TiposProductos tp
+                LEFT JOIN Usuarios u on tp.UsuarioIdCreador = u.Id 
+                    WHERE tp.EmpresaId = ?
+                    ORDER BY tp.${pCampoOrden} ${pOrden}
                     LIMIT 50 OFFSET ?;`,
                 [pEmpId,pOffset]
             );
@@ -53,18 +50,17 @@ const Propiedades = {
         }else{
             const [rows] = await pool.query(
                 `SELECT 
-                    p.Id as proId,
-                    p.EmpresaId as proEmp,
-                    p.Nombre as proNombre,
-                    p.TipoDato as proTipoDato,
-                    p.Estado as proEstado,
-                    p.FechaCreacion as proFecCreacon,
+                    tp.Id as tipProId,
+                    tp.EmpresaId as tipProEmp,
+                    tp.Nombre as tipDocNombre,
+                    tp.Estado as tipDocEstado,
+                    tp.FechaCreacion as tipDocFecCreacion,
                     u.Nombres as proUsuario
-                FROM Propiedades p
-                LEFT JOIN Usuarios u on p.UsuarioIdCreador = u.Id
-                    WHERE EmpresaId = ?
-                    AND p.${pCampoOrden} LIKE ?
-                    ORDER BY p.${pCampoOrden} ${pOrden}
+                FROM TiposProductos tp
+                LEFT JOIN Usuarios u on tp.UsuarioIdCreador = u.Id 
+                    WHERE tp.EmpresaId = ?
+                    AND tp.${pCampoOrden} LIKE ?
+                    ORDER BY tp.${pCampoOrden} ${pOrden}
                     LIMIT 50 OFFSET ?;`,
                 [pEmpId,pTexto,pOffset]
             );
@@ -74,13 +70,15 @@ const Propiedades = {
 
     },
 
+    //no existe columna Estado en esta tabla, se listan todos los registros de la empresa
     async traerActivas({pEmpId}){
         const [rows] = await pool.query(
             `SELECT
                 Id,
-                Nombre,
-                TipoDato
-            FROM Propiedades WHERE EmpresaId = ? AND Estado = true;`,
+                Nombre
+            FROM TiposProductos WHERE EmpresaId = ? 
+            AND  Estado = true
+            ORDER BY Nombre ASC;`,
             [pEmpId]
         );
 
@@ -89,18 +87,16 @@ const Propiedades = {
 
     async traerPorId({pId,pEmpId}){
         const [rows] = await pool.query(
-            `SELECT  
-                p.Id as proId,
-                p.EmpresaId as proEmp,
-                p.Nombre as proNombre,
-                p.TipoDato as proTipoDato,
-                p.Estado as proEstado,
-                p.FechaCreacion as proFecCreacion,
+            `SELECT
+                tp.Id as tipProId,
+                tp.EmpresaId as tipProEmp,
+                tp.Nombre as tipDocNombre,
+                tp.Estado as tipDocEstado,
+                tp.FechaCreacion as tipDocFecCreacion,
                 u.Nombres as proUsuario
-            FROM Propiedades p
-            LEFT JOIN Usuarios u on p.UsuarioIdCreador = u.Id 
-            WHERE p.Id = ? 
-            and p.EmpresaId = ?;`,
+            FROM TiposProductos tp
+            LEFT JOIN Usuarios u on tp.UsuarioIdCreador = u.Id
+            WHERE tp.Id = ? and tp.EmpresaId = ?;`,
             [pId,pEmpId]
         );
 
@@ -109,7 +105,7 @@ const Propiedades = {
 
     async traerPorNombre({pEmpId,pNombre}){
         const [rows] = await pool.query(
-            `SELECT * FROM Propiedades WHERE Nombre = ? and EmpresaId = ?;`,
+            `SELECT * FROM TiposProductos WHERE Nombre = ? and EmpresaId = ?;`,
             [pNombre,pEmpId]
         );
 
@@ -121,7 +117,7 @@ const Propiedades = {
         if(pTexto === '%%'){
             const [rows] = await pool.query(
                 `SELECT COUNT(*) AS total
-                FROM Propiedades
+                FROM TiposProductos
                     WHERE EmpresaId = ?
                     ORDER BY ${pCampoOrden} ${pOrden};`,
                 [pEmpId]
@@ -131,7 +127,7 @@ const Propiedades = {
         }else{
             const [rows] = await pool.query(
                 `SELECT COUNT(*) AS total
-                FROM Propiedades
+                FROM TiposProductos
                     WHERE EmpresaId = ?
                     AND ${pCampoOrden} LIKE ?
                     ORDER BY ${pCampoOrden} ${pOrden};`,
@@ -145,4 +141,4 @@ const Propiedades = {
 
 }
 
-export default Propiedades
+export default TiposProducto

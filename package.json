@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node app",
     "seed:origen": "node seed/seedOrigen.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

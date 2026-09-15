@@ -95,64 +95,141 @@ test('registrarMovimiento rechaza una bolsa PRESTADO_A_TALLER sin propietario', 
     });
 });
 
-// transferirEntreBolsas abre y confirma su propia transaccion via pool, asi que no puede
-// probarse dentro de withRollback: el escenario se monta y se confirma con una conexion
-// propia y se limpia manualmente al final (Movimientos y Existencias primero, porque sus
-// FK contra Articulos son RESTRICT y bloquearian el DELETE del articulo).
+// transferirEntreBolsas abre y CONFIRMA su propia transaccion via pool, asi que sus pruebas no
+// pueden correr dentro de withRollback: montan el escenario con una conexion propia, lo confirman
+// y lo limpian a mano al final.
+
+// Siembra el articulo y su bolsa DISPONIBLE escribiendo directo en las tablas, sin pasar por
+// registrarMovimiento: asi el unico Movimiento que puede existir despues es el que genere la
+// transferencia, y las pruebas pueden contar filas de Movimientos como asercion exacta.
+const sembrarArticuloConExistencia = async (pool, { pCantidad, pCosto }) => {
+    const conn = await pool.getConnection();
+    try {
+        await conn.beginTransaction();
+        const [productoRows] = await conn.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
+        const [usuarioRows] = await conn.query(`SELECT Id FROM Usuarios LIMIT 1;`);
+        const [insertResult] = await conn.query(
+            `INSERT INTO Articulos(EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU, Nombre, CostoUnitario)
+             VALUES (1, ?, ?, ?, 'ARTICULO TRANSFERENCIA', ?);`,
+            [usuarioRows[0].Id, productoRows[0].Id, generarSKUDePrueba('R'), pCosto]
+        );
+        const articuloId = insertResult.insertId;
+        await Existencias.upsertCantidad(conn, {
+            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pPropietarioId: null, pDelta: pCantidad
+        });
+        await conn.commit();
+        return { articuloId, usuarioId: usuarioRows[0].Id };
+    } catch (error) {
+        await conn.rollback();
+        throw error;
+    } finally {
+        conn.release();
+    }
+};
+
+// Movimientos y Existencias se borran primero: sus FK contra Articulos son RESTRICT y
+// bloquearian el DELETE del articulo.
+const limpiarArticuloSembrado = async (pool, articuloId) => {
+    if (!articuloId) return;
+    await pool.query(`DELETE FROM Movimientos WHERE ArticuloId = ?;`, [articuloId]);
+    await pool.query(`DELETE FROM Existencias WHERE ArticuloId = ?;`, [articuloId]);
+    await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [articuloId]);
+};
+
+const leerEstadoArticulo = async (pool, articuloId) => {
+    const conn = await pool.getConnection();
+    try {
+        const disponible = await Existencias.traerBolsaBloqueada(conn, {
+            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+        });
+        const reservado = await Existencias.traerBolsaBloqueada(conn, {
+            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'RESERVADO', pPropietarioId: null
+        });
+        const articulo = await Articulos.traerPorIdConexion(conn, { pId: articuloId, pEmpId: 1 });
+        const [movimientos] = await conn.query(
+            `SELECT TipoMovimiento, BolsaEstado, Cantidad FROM Movimientos WHERE ArticuloId = ? ORDER BY Id ASC;`,
+            [articuloId]
+        );
+        return { disponible, reservado, articulo, movimientos };
+    } finally {
+        conn.release();
+    }
+};
+
 test('transferirEntreBolsas mueve cantidad de una bolsa a otra atomicamente', async () => {
     const { pool } = await import('../../Database/config.js');
-    const setupConn = await pool.getConnection();
     let articuloId;
     try {
-        await setupConn.beginTransaction();
-        const [productoRows] = await setupConn.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
-        const [usuarioRows] = await setupConn.query(`SELECT Id FROM Usuarios LIMIT 1;`);
-        const [insertResult] = await setupConn.query(
-            `INSERT INTO Articulos(EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU, Nombre)
-             VALUES (1, ?, ?, ?, 'ARTICULO TRANSFERENCIA');`,
-            [usuarioRows[0].Id, productoRows[0].Id, generarSKUDePrueba('R')]
-        );
-        articuloId = insertResult.insertId;
-        await registrarMovimiento(setupConn, {
-            pEmpId: 1, pUsuId: usuarioRows[0].Id, pArticuloId: articuloId,
-            pTipoMovimiento: 'ENTRADA', pBolsaEstado: 'DISPONIBLE', pPropietarioId: null,
-            pCantidad: 10, pCostoUnitario: 40, pMotivo: 'AJUSTE', pTipoOrigen: 'AJUSTE',
-            pOrigenId: null, pObservaciones: null
-        });
-        await setupConn.commit();
+        const sembrado = await sembrarArticuloConExistencia(pool, { pCantidad: 10, pCosto: 40 });
+        articuloId = sembrado.articuloId;
 
         await transferirEntreBolsas({
             salida: {
-                pEmpId: 1, pUsuId: usuarioRows[0].Id, pArticuloId: articuloId,
+                pEmpId: 1, pUsuId: sembrado.usuarioId, pArticuloId: articuloId,
                 pBolsaEstado: 'DISPONIBLE', pPropietarioId: null, pCantidad: 4,
                 pCostoUnitario: null, pMotivo: 'VENTA', pTipoOrigen: 'VENTA', pOrigenId: 1, pObservaciones: null
             },
             entrada: {
-                pEmpId: 1, pUsuId: usuarioRows[0].Id, pArticuloId: articuloId,
+                pEmpId: 1, pUsuId: sembrado.usuarioId, pArticuloId: articuloId,
                 pBolsaEstado: 'RESERVADO', pPropietarioId: null, pCantidad: 4,
                 pCostoUnitario: null, pMotivo: 'VENTA', pTipoOrigen: 'VENTA', pOrigenId: 1, pObservaciones: null
             }
         });
 
-        const verificacionConn = await pool.getConnection();
-        const disponible = await Existencias.traerBolsaBloqueada(verificacionConn, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
-        });
-        const reservado = await Existencias.traerBolsaBloqueada(verificacionConn, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'RESERVADO', pPropietarioId: null
-        });
-        const articulo = await Articulos.traerPorIdConexion(verificacionConn, { pId: articuloId, pEmpId: 1 });
-        verificacionConn.release();
+        const estado = await leerEstadoArticulo(pool, articuloId);
 
-        assert.equal(Number(disponible.Cantidad), 6);
-        assert.equal(Number(reservado.Cantidad), 4);
+        assert.equal(Number(estado.disponible.Cantidad), 6);
+        assert.equal(Number(estado.reservado.Cantidad), 4);
         // la ENTRADA a RESERVADO no es una compra: no debe recostear el articulo
-        assert.equal(Number(articulo.CostoUnitario), 40);
+        assert.equal(Number(estado.articulo.CostoUnitario), 40);
+        // ambas mitades quedaron en el kardex
+        assert.equal(estado.movimientos.length, 2);
+        assert.equal(estado.movimientos[0].TipoMovimiento, 'SALIDA');
+        assert.equal(estado.movimientos[0].BolsaEstado, 'DISPONIBLE');
+        assert.equal(estado.movimientos[1].TipoMovimiento, 'ENTRADA');
+        assert.equal(estado.movimientos[1].BolsaEstado, 'RESERVADO');
     } finally {
-        if (articuloId) {
-            await pool.query(`DELETE FROM Movimientos WHERE ArticuloId = ?;`, [articuloId]);
-            await pool.query(`DELETE FROM Existencias WHERE ArticuloId = ?;`, [articuloId]);
-            await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [articuloId]);
-        }
+        await limpiarArticuloSembrado(pool, articuloId);
+    }
+});
+
+// Esta es la prueba que justifica el nombre "atomicamente": si los dos movimientos corrieran en
+// transacciones separadas, la SALIDA quedaria confirmada y la bolsa DISPONIBLE bajaria a 7.
+test('transferirEntreBolsas revierte la salida si la entrada falla', async () => {
+    const { pool } = await import('../../Database/config.js');
+    let articuloId;
+    try {
+        const sembrado = await sembrarArticuloConExistencia(pool, { pCantidad: 10, pCosto: 40 });
+        articuloId = sembrado.articuloId;
+
+        await assert.rejects(
+            () => transferirEntreBolsas({
+                // la salida es valida y se aplica primero...
+                salida: {
+                    pEmpId: 1, pUsuId: sembrado.usuarioId, pArticuloId: articuloId,
+                    pBolsaEstado: 'DISPONIBLE', pPropietarioId: null, pCantidad: 3,
+                    pCostoUnitario: null, pMotivo: 'PRESTAMO_PROPIO', pTipoOrigen: 'PRESTAMO',
+                    pOrigenId: 1, pObservaciones: null
+                },
+                // ...y la entrada falla despues: PRESTADO_A_TALLER exige propietario
+                entrada: {
+                    pEmpId: 1, pUsuId: sembrado.usuarioId, pArticuloId: articuloId,
+                    pBolsaEstado: 'PRESTADO_A_TALLER', pPropietarioId: null, pCantidad: 3,
+                    pCostoUnitario: null, pMotivo: 'PRESTAMO_PROPIO', pTipoOrigen: 'PRESTAMO',
+                    pOrigenId: 1, pObservaciones: null
+                }
+            }),
+            /requiere un propietario/
+        );
+
+        const estado = await leerEstadoArticulo(pool, articuloId);
+
+        // la salida ya aplicada se revirtio junto con la entrada fallida: sigue en 10, no en 7
+        assert.equal(Number(estado.disponible.Cantidad), 10);
+        // y ninguna de las dos mitades quedo en el kardex
+        assert.equal(estado.movimientos.length, 0);
+    } finally {
+        await limpiarArticuloSembrado(pool, articuloId);
     }
 });

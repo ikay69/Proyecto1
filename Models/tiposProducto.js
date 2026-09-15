@@ -33,11 +33,12 @@ const TiposProducto = {
         if(pTexto === '%%'){
             const [rows] = await pool.query(
                 `SELECT 
-                    tp.Id as tipProId,
-                    tp.EmpresaId as tipProEmp,
-                    tp.Nombre as tipDocNombre,
-                    tp.Estado as tipDocEstado,
-                    tp.FechaCreacion as tipDocFecCreacion,
+                    tp.Id               as tipProId,
+                    tp.EmpresaId        as tipProEmp,
+                    tp.Nombre           as tipProNombre,
+                    tp.Estado           as tipProEstado,
+                    tp.FechaCreacion    as tipProFecCreacion,
+                    u.Nombres           as tipProUsuario
                 FROM TiposProductos tp
                 LEFT JOIN Usuarios u on tp.UsuarioIdCreador = u.Id 
                     WHERE tp.EmpresaId = ?
@@ -50,12 +51,12 @@ const TiposProducto = {
         }else{
             const [rows] = await pool.query(
                 `SELECT 
-                    tp.Id as tipProId,
-                    tp.EmpresaId as tipProEmp,
-                    tp.Nombre as tipDocNombre,
-                    tp.Estado as tipDocEstado,
-                    tp.FechaCreacion as tipDocFecCreacion,
-                    u.Nombres as proUsuario
+                    tp.Id               as tipProId,
+                    tp.EmpresaId        as tipProEmp,
+                    tp.Nombre           as tipProNombre,
+                    tp.Estado           as tipProEstado,
+                    tp.FechaCreacion    as tipProFecCreacion,
+                    u.Nombres           as tipProUsuario
                 FROM TiposProductos tp
                 LEFT JOIN Usuarios u on tp.UsuarioIdCreador = u.Id 
                     WHERE tp.EmpresaId = ?
@@ -88,12 +89,12 @@ const TiposProducto = {
     async traerPorId({pId,pEmpId}){
         const [rows] = await pool.query(
             `SELECT
-                tp.Id as tipProId,
-                tp.EmpresaId as tipProEmp,
-                tp.Nombre as tipDocNombre,
-                tp.Estado as tipDocEstado,
-                tp.FechaCreacion as tipDocFecCreacion,
-                u.Nombres as proUsuario
+                tp.Id               as tipProId,
+                tp.EmpresaId        as tipProEmp,
+                tp.Nombre           as tipProNombre,
+                tp.Estado           as tipProEstado,
+                tp.FechaCreacion    as tipProFecCreacion,
+                u.Nombres           as tipProUsuario
             FROM TiposProductos tp
             LEFT JOIN Usuarios u on tp.UsuarioIdCreador = u.Id
             WHERE tp.Id = ? and tp.EmpresaId = ?;`,

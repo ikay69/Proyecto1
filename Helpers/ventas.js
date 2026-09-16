@@ -39,6 +39,13 @@ const ventaValidaDatos = async (req,res,next) => {
     if (!Array.isArray(Articulos) || Articulos.length === 0) {
         return res.status(401).json({msg:'Debe registrar al menos un artículo'});
     }
+    //tope superior de lineas: cada linea cuesta una consulta al pool en el Controller (para
+    //validar y congelar nombre/costo) y un lock de fila de Existencias retenido hasta el commit.
+    //Una venta real de mostrador no se acerca ni de lejos a 200 lineas; el limite solo evita que
+    //un payload desmedido monopolice el pool o la transaccion.
+    if (Articulos.length > 200) {
+        return res.status(401).json({msg:'La venta no puede tener más de 200 líneas'});
+    }
     for (const item of Articulos) {
         //sin este guarda, un elemento null de la lista haria estallar el acceso a
         //item.idArticulo y la ruta respondería 500 (con stack trace) en vez de un 401

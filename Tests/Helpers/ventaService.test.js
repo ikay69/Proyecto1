@@ -113,6 +113,33 @@ test('agruparLineasPorArticulo conserva articulos distintos por separado', () =>
     assert.equal(resultado[1].idArticulo, 2);
 });
 
+test('agruparLineasPorArticulo arrastra el CostoUnitario que resolvio el Controller', () => {
+    const resultado = agruparLineasPorArticulo([
+        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100, CostoUnitario:70}
+    ]);
+    assert.equal(resultado[0].CostoUnitario, 70);
+});
+
+// a diferencia del precio (negociado por venta, dos valores distintos son una contradiccion del
+// llamador), el costo es un dato de la base leido una sola vez por articulo: si llegara repetido
+// con valores distintos no hay nada que decidir, se toma el primero y no se lanza.
+test('agruparLineasPorArticulo toma el primer CostoUnitario si el articulo viene repetido', () => {
+    const resultado = agruparLineasPorArticulo([
+        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100, CostoUnitario:70},
+        {idArticulo:1, ArticuloNombre:'A', Cantidad:1, PrecioVentaUnidad:100, CostoUnitario:999}
+    ]);
+    assert.equal(resultado.length, 1);
+    assert.equal(resultado[0].Cantidad, 3);
+    assert.equal(resultado[0].CostoUnitario, 70);
+});
+
+test('agruparLineasPorArticulo deja CostoUnitario en null si la linea no lo trae', () => {
+    const resultado = agruparLineasPorArticulo([
+        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100}
+    ]);
+    assert.equal(resultado[0].CostoUnitario, null);
+});
+
 test('crearVentaContado descuenta existencia y registra la venta con sus lineas', async () => {
     const { productoId, usuarioId, terceroId } = await traerContexto();
     const teniaRolCliente = await rolClienteExistia(terceroId);
@@ -125,7 +152,7 @@ test('crearVentaContado descuenta existencia y registra la venta con sus lineas'
             pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:6000, pValorTransaccion:0,
-            articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000}]
+            articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
         });
 
         const bolsas = await Existencias.traerBolsasPorArticulo({pEmpId:1, pArticuloId:articuloId});
@@ -148,8 +175,9 @@ test('crearVentaContado descuenta existencia y registra la venta con sus lineas'
         assert.equal(movimientos[0].movTipo, 'SALIDA');
         assert.equal(movimientos[0].movBolsa, 'DISPONIBLE');
         assert.equal(Number(movimientos[0].movCantidad), 2);
-        // el kardex guarda el costo vigente del articulo al momento de venderlo (sembrado en 100),
-        // no null: es la unica base para calcular el costo de ventas despues.
+        // el kardex guarda el costo que el llamador (el Controller, que ya leyo el Articulo para
+        // validarlo) entrego en la linea, no null: es la unica base para calcular el costo de
+        // ventas despues.
         assert.equal(Number(movimientos[0].movCosto), 100);
 
         // el rol CLIENTE se asigna solo, sin que el llamador tenga que pedirlo
@@ -175,8 +203,8 @@ test('crearVentaContado agrupa dos lineas del mismo articulo en una sola fila y 
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:9000, pValorTransaccion:0,
             articulosVendidos:[
-                {idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000},
-                {idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:1, PrecioVentaUnidad:3000}
+                {idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100},
+                {idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:1, PrecioVentaUnidad:3000, CostoUnitario:100}
             ]
         });
 
@@ -210,7 +238,7 @@ test('crearVentaContado rechaza un saldo distinto de cero y no toca inventario',
                 pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
                 pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
                 pValorDescuento:0, pValorEfectivo:100, pValorTransaccion:0,
-                articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000}]
+                articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
             }),
             /cubrir/i
         );
@@ -260,14 +288,17 @@ test('crearVentaContado revierte la venta completa si una linea posterior no tie
 
         const [ventasAntes] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
 
+        // articuloConSaldoId se siembra primero, asi que tiene el Id menor: el orden por id que
+        // aplica crearVentaContado deja igualmente la linea con saldo de primera y la que no
+        // alcanza de segunda, que es justo el escenario que esta prueba necesita.
         await assert.rejects(
             () => crearVentaContado({
                 pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
                 pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
                 pValorDescuento:0, pValorEfectivo:8000, pValorTransaccion:0,
                 articulosVendidos:[
-                    {idArticulo:articuloConSaldoId, ArticuloNombre:'LINEA QUE SI ALCANZA', Cantidad:2, PrecioVentaUnidad:3000},
-                    {idArticulo:articuloSinSaldoId, ArticuloNombre:'LINEA SIN EXISTENCIA', Cantidad:2, PrecioVentaUnidad:1000}
+                    {idArticulo:articuloConSaldoId, ArticuloNombre:'LINEA QUE SI ALCANZA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100},
+                    {idArticulo:articuloSinSaldoId, ArticuloNombre:'LINEA SIN EXISTENCIA', Cantidad:2, PrecioVentaUnidad:1000, CostoUnitario:50}
                 ]
             }),
             /Existencia insuficiente/
@@ -297,6 +328,50 @@ test('crearVentaContado revierte la venta completa si una linea posterior no tie
     } finally {
         await limpiarArticulo(articuloConSaldoId);
         await limpiarArticulo(articuloSinSaldoId);
+        await limpiarRolCliente(terceroId, teniaRolCliente);
+    }
+});
+
+// Cada linea toma un SELECT ... FOR UPDATE sobre la bolsa DISPONIBLE de su articulo. Si el orden
+// de los locks dependiera del payload, dos ventas concurrentes con los mismos dos articulos en
+// orden opuesto podrian bloquearse mutuamente (deadlock ABBA). crearVentaContado ordena las lineas
+// por id de articulo ANTES de abrir la transaccion; esta prueba manda las lineas en orden
+// descendente y verifica que los Movimientos quedaron escritos en orden ascendente
+// (Movimientos.traerPorOrigen ordena por m.Id, o sea por orden real de insercion), que es lo unico
+// que demuestra que el sort corre antes del bucle y no solo que la venta no falla.
+test('crearVentaContado toma los articulos en orden ascendente de id sin importar el orden del payload', async () => {
+    const { productoId, usuarioId, terceroId } = await traerContexto();
+    const teniaRolCliente = await rolClienteExistia(terceroId);
+
+    let articuloPrimeroId, articuloSegundoId, ventaId;
+    try {
+        articuloPrimeroId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:5, costo:100});
+        articuloSegundoId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:5, costo:250});
+        assert.ok(articuloSegundoId > articuloPrimeroId, 'el segundo articulo sembrado debe tener el Id mayor');
+
+        // payload deliberadamente al reves: primero el id mayor
+        ventaId = await crearVentaContado({
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+            pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
+            pValorDescuento:0, pValorEfectivo:5000, pValorTransaccion:0,
+            articulosVendidos:[
+                {idArticulo:articuloSegundoId, ArticuloNombre:'ID MAYOR', Cantidad:1, PrecioVentaUnidad:2000, CostoUnitario:250},
+                {idArticulo:articuloPrimeroId, ArticuloNombre:'ID MENOR', Cantidad:1, PrecioVentaUnidad:3000, CostoUnitario:100}
+            ]
+        });
+
+        const movimientos = await Movimientos.traerPorOrigen({pEmpId:1, pTipoOrigen:'VENTA', pOrigenId:ventaId});
+        assert.equal(movimientos.length, 2);
+        assert.equal(Number(movimientos[0].movArticuloId), articuloPrimeroId);
+        assert.equal(Number(movimientos[1].movArticuloId), articuloSegundoId);
+
+        // de paso: cada movimiento se quedo con el costo de SU linea, no con el de la primera
+        assert.equal(Number(movimientos[0].movCosto), 100);
+        assert.equal(Number(movimientos[1].movCosto), 250);
+    } finally {
+        await limpiarVenta(ventaId);
+        await limpiarArticulo(articuloPrimeroId);
+        await limpiarArticulo(articuloSegundoId);
         await limpiarRolCliente(terceroId, teniaRolCliente);
     }
 });

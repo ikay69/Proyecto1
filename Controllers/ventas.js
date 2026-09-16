@@ -31,7 +31,10 @@ const ventasControllers = {
             }
 
             //cada idArticulo se valida y se resuelve su Nombre AQUI, antes de la transaccion:
-            //el snapshot de VentaDetalles nunca usa un nombre que mande el cliente.
+            //el snapshot de VentaDetalles nunca usa un nombre que mande el cliente. De la misma
+            //lectura sale CostoUnitario (artCosto), que el servicio guarda en el kardex como
+            //rastro de auditoria: leerlo aqui evita que el servicio vuelva a consultar cada
+            //articulo (2N consultas en vez de N) y cierra la ventana TOCTOU entre ambas lecturas.
             const articulosResueltos = [];
             for (const item of articulosBody) {
                 const articulo = await Articulos.traerPorId({pId:item.idArticulo, pEmpId:idEmpresa});
@@ -42,7 +45,8 @@ const ventasControllers = {
                     idArticulo: item.idArticulo,
                     ArticuloNombre: articulo.artNombre,
                     Cantidad: item.Cantidad,
-                    PrecioVentaUnidad: item.PrecioVentaUnidad
+                    PrecioVentaUnidad: item.PrecioVentaUnidad,
+                    CostoUnitario: articulo.artCosto
                 });
             }
 

@@ -1,5 +1,4 @@
 import { pool } from '../Database/config.js';
-import Articulos from '../Models/articulos.js';
 import Ventas from '../Models/ventas.js';
 import VentaDetalles from '../Models/ventaDetalles.js';
 import TercerosRoles from '../Models/tercrosRoles.js';
@@ -9,6 +8,12 @@ import { calcularSubtotalLineas, calcularSaldoVenta, validarSaldoContado } from 
 //agrupa lineas repetidas del mismo articulo en una sola (uq_ventadetalle_articulo no
 //permite dos filas del mismo ArticuloId en la misma venta), sumando cantidades. Si el
 //mismo articulo llega con precios distintos, se rechaza en vez de adivinar cual usar.
+//CostoUnitario viaja distinto a PrecioVentaUnidad: el precio lo negocia el vendedor por
+//venta (dos lineas del mismo articulo con precios distintos es una contradiccion del
+//llamador), mientras que el costo es un dato de la base leido por el Controller para el
+//rastro de auditoria del kardex. Si dos lineas del mismo articulo trajeran costos
+//distintos seria ruido irrelevante -- misma fila de Articulos, misma consulta, leidas con
+//milisegundos de diferencia -- asi que se conserva el de la primera ocurrencia sin lanzar.
 const agruparLineasPorArticulo = (articulos) => {
     const porArticulo = new Map();
     for (const item of articulos) {
@@ -23,7 +28,8 @@ const agruparLineasPorArticulo = (articulos) => {
                 idArticulo: item.idArticulo,
                 ArticuloNombre: item.ArticuloNombre,
                 Cantidad: Number(item.Cantidad),
-                PrecioVentaUnidad: Number(item.PrecioVentaUnidad)
+                PrecioVentaUnidad: Number(item.PrecioVentaUnidad),
+                CostoUnitario: item.CostoUnitario ?? null
             });
         }
     }
@@ -42,6 +48,16 @@ const crearVentaContado = async ({
     //lineas, mismo articulo con precios distintos) ni siquiera abre conexion.
     //calcularSubtotalLineas ya rechaza el arreglo vacio, no hace falta repetir esa guarda.
     const lineasAgrupadas = agruparLineasPorArticulo(articulosVendidos ?? []);
+
+    //orden global de adquisicion de locks: el bucle de movimientos toma un SELECT ... FOR UPDATE
+    //sobre la bolsa DISPONIBLE de cada articulo, uno por linea. Si dos ventas concurrentes
+    //incluyeran los mismos dos articulos en orden opuesto (una A->B, otra B->A), cada una podria
+    //quedarse con un lock esperando el del otro: deadlock ABBA clasico. Ordenar siempre por id
+    //numerico de articulo hace que TODAS las ventas pidan los locks en el mismo orden, lo que
+    //elimina esa clase de deadlock por completo. Va aqui, antes de abrir la transaccion, para que
+    //tambien fije el orden de las filas de VentaDetalles.
+    lineasAgrupadas.sort((a, b) => Number(a.idArticulo) - Number(b.idArticulo));
+
     const subtotal = calcularSubtotalLineas(lineasAgrupadas);
     const { cancelado, saldo } = calcularSaldoVenta({
         subtotal, descuento: pValorDescuento, efectivo: pValorEfectivo, transaccion: pValorTransaccion
@@ -56,24 +72,12 @@ const crearVentaContado = async ({
         await TercerosRoles.crear({pEmpId, pTerId:pTerceroId, pRol:'CLIENTE', pUsuId});
     }
 
-    //el costo de cada articulo se guarda en el kardex solo como rastro de auditoria (costo de la
-    //mercancia al momento de venderla, base de cualquier informe de COGS). registrarMovimiento no
-    //lo usa para calcular nada en una SALIDA -- el recosteo promedio solo ocurre en ENTRADA -- asi
-    //que no necesita FOR UPDATE ni la conexion de la transaccion.
-    //Se resuelve TODO aqui, antes de pedir la conexion de la transaccion, y NO dentro del bucle de
-    //movimientos: pedir una segunda conexion del pool mientras la transaccion ya tiene una tomada
-    //puede colgar el proceso. Con connectionLimit=10 y queueLimit=0 (espera ilimitada, sin timeout)
-    //en Database/config.js, 10 ventas concurrentes reteniendo su conexion y pidiendo una segunda a
-    //la vez se bloquean entre si para siempre. De paso, sacar estas lecturas del bucle acorta
-    //cuanto tiempo se retienen los locks de Existencias dentro de la transaccion.
-    const costosPorArticulo = new Map();
-    for (const linea of lineasAgrupadas) {
-        const articulo = await Articulos.traerPorId({pId: linea.idArticulo, pEmpId});
-        //si el articulo no apareciera se registra null en vez de lanzar: su existencia ya la valida
-        //el Controller, y esta funcion no agrega validaciones propias.
-        costosPorArticulo.set(linea.idArticulo, articulo ? articulo.artCosto : null);
-    }
-
+    //el costo de cada linea (CostoUnitario) llega ya resuelto desde el Controller, que de todas
+    //formas tiene que leer cada Articulo para validar Estado/Vender y congelar ArticuloNombre.
+    //Releerlo aqui duplicaria las consultas al pool (2N en vez de N) y abriria una ventana TOCTOU
+    //entre ambas lecturas. Se guarda en el kardex solo como rastro de auditoria (costo de la
+    //mercancia al momento de venderla, base de cualquier informe de COGS): registrarMovimiento no
+    //lo usa para calcular nada en una SALIDA -- el recosteo promedio solo ocurre en ENTRADA.
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -102,7 +106,7 @@ const crearVentaContado = async ({
                 pBolsaEstado: 'DISPONIBLE',
                 pPropietarioId: null,
                 pCantidad: linea.Cantidad,
-                pCostoUnitario: costosPorArticulo.get(linea.idArticulo) ?? null,
+                pCostoUnitario: linea.CostoUnitario ?? null,
                 pMotivo: 'VENTA',
                 pTipoOrigen: 'VENTA',
                 pOrigenId: ventaId,

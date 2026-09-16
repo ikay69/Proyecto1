@@ -87,6 +87,20 @@ router.post('/getactivasarticulo',[
     validarCampo
 ],articulosControllers.listarActivas);
 
+//listar articulos vendibles con existencia disponible (ventanilla de venta, paginado)
+router.post('/getvendiblesarticulo',[
+    validarJWT,
+    validarRol('ADMINISTRADOR','VENDEDOR'),
+    check('idEmpresa','Empresa campo obligatorio').not().isEmpty(),
+    check('campoOrdenar','Campo ordenar obligatorio').not().isEmpty(),
+    check('orden','Orden campo obligatorio').not().isEmpty(),
+    check('pagina','Pagina campo obligatorio').not().isEmpty(),
+    check('idEmpresa').custom(validarId),
+    validarUsuarioEmpresa,
+    articuloValidaFiltros,
+    validarCampo
+],articulosControllers.listarVendibles);
+
 //listar articulo por id (incluye sus propiedades)
 router.post('/getidarticulo',[
     validarJWT,

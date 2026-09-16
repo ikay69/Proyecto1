@@ -208,6 +208,29 @@ const articulosControllers = {
         }
     },
 
+    //"ventanilla" de venta: solo articulos activos, vendibles y con existencia DISPONIBLE
+    listarVendibles: async (req,res) => {
+        try {
+            const {idEmpresa,campoOrdenar,orden,pagina,textoFiltro} = req.body;
+
+            const vOrden = orden === 'DESC' ? 'DESC' : 'ASC';
+            const vCampoOrdenar = normalizarCampoOrden(campoOrdenar);
+            const vTextoFiltro = normalizarTextoFiltro(campoOrdenar, textoFiltro);
+
+            let vPagina = Number(pagina);
+            const cantArticulos = await Articulos.contarVendiblesFiltro({pEmpId:idEmpresa,pCampoOrden:vCampoOrdenar,pTexto:vTextoFiltro});
+            const maxPagina = Math.max(1, Math.ceil(cantArticulos/50));
+            vPagina = Math.min(Math.max(vPagina,1), maxPagina);
+            const vOffset = (vPagina - 1) * 50;
+
+            const articulos = await Articulos.traerVendibles({pEmpId:idEmpresa,pCampoOrden:vCampoOrdenar,pOrden:vOrden,pOffset:vOffset,pTexto:vTextoFiltro});
+
+            return res.status(200).json({cantData:cantArticulos, data:articulos});
+        } catch (error) {
+            return res.status(500).json({msg:String(error)});
+        }
+    },
+
     listarPorId: async (req,res) => {
         try {
             const {idEmpresa,idArticulo} = req.body;

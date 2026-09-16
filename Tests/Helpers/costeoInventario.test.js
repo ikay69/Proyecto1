@@ -33,6 +33,32 @@ test('calcularCostoPromedioPonderado: rechaza cantidad entrante <= 0', () => {
     }));
 });
 
+test('calcularCostoPromedioPonderado: rechaza la primera entrada sin costo entrante', () => {
+    assert.throws(() => calcularCostoPromedioPonderado({
+        cantidadActual: 0, costoActual: null, cantidadEntrante: 10
+    }), /obligatorio en la primera entrada/);
+
+    assert.throws(() => calcularCostoPromedioPonderado({
+        cantidadActual: 0, costoActual: null, cantidadEntrante: 10, costoEntrante: null
+    }), /obligatorio en la primera entrada/);
+});
+
+test('calcularCostoPromedioPonderado: entrada posterior sin costo conserva el promedio vigente', () => {
+    assert.equal(calcularCostoPromedioPonderado({
+        cantidadActual: 10, costoActual: 50, cantidadEntrante: 5
+    }), 50);
+
+    assert.equal(calcularCostoPromedioPonderado({
+        cantidadActual: 10, costoActual: 50, cantidadEntrante: 5, costoEntrante: null
+    }), 50);
+});
+
+test('calcularCostoPromedioPonderado: rechaza costo entrante negativo con existencia previa', () => {
+    assert.throws(() => calcularCostoPromedioPonderado({
+        cantidadActual: 10, costoActual: 50, cantidadEntrante: 5, costoEntrante: -1
+    }));
+});
+
 test('calcularCostoProduccion: suma cantidad * costoUnitario de cada consumo', () => {
     const total = calcularCostoProduccion([
         { cantidad: 2, costoUnitario: 100 },
@@ -43,6 +69,17 @@ test('calcularCostoProduccion: suma cantidad * costoUnitario de cada consumo', (
 
 test('calcularCostoProduccion: rechaza lista vacía', () => {
     assert.throws(() => calcularCostoProduccion([]));
+});
+
+test('calcularCostoProduccion: rechaza un consumo sin costo unitario registrado', () => {
+    assert.throws(() => calcularCostoProduccion([
+        { cantidad: 2, costoUnitario: 100 },
+        { cantidad: 1, costoUnitario: null }
+    ]), /no tiene un costo unitario registrado/);
+
+    assert.throws(() => calcularCostoProduccion([
+        { cantidad: 1 }
+    ]), /no tiene un costo unitario registrado/);
 });
 
 test('calcularCostoUnitarioProducido: divide el costo total entre la cantidad producida', () => {

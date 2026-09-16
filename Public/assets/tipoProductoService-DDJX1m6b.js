@@ -1,0 +1,1 @@
+import{h as o}from"./http-DR0jEq99.js";const r={getAll(t){return o.post("/tiposproducto/getalltipoproducto",t)},create(t){return o.post("/tiposproducto/newtipoproducto",t)},getById(t){return o.post("/tiposproducto/getidtipoproducto",t)},update(t){return o.put("/tiposproducto/updatetipoproducto",t)}};export{r as t};

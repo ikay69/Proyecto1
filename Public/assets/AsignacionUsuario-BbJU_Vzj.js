@@ -1,0 +1,1 @@
+import{E as n}from"./EnConstruccion-DABzaq3M.js";import{_ as s,c,r as t,o as r}from"./index-CZhJhWyN.js";const e={name:"AsignacionUsuario",components:{EnConstruccion:n}};function a(i,p,u,_,m,f){const o=t("EnConstruccion");return r(),c(o,{titulo:"Asignación de usuario"})}const C=s(e,[["render",a]]);export{C as default};

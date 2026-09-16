@@ -3,11 +3,11 @@ import { pool } from '../Database/config.js';
 const TercerosRoles = {
     async crear({pEmpId,pTerId,pRol,pUsuId}){
         const [rows] = await pool.query(
-            `INSERT INTO TercerosRoles
+            `INSERT INTO TercerosRoles(
                 EmpresaId,
                 TerceroId,
                 Rol,
-                UsuarioIdCreador
+                UsuarioIdCreador)
             VALUES(?,?,?,?)`,
             [pEmpId,pTerId,pRol,pUsuId]
         );

@@ -40,6 +40,12 @@ const ventaValidaDatos = async (req,res,next) => {
         return res.status(401).json({msg:'Debe registrar al menos un artículo'});
     }
     for (const item of Articulos) {
+        //sin este guarda, un elemento null de la lista haria estallar el acceso a
+        //item.idArticulo y la ruta respondería 500 (con stack trace) en vez de un 401
+        //de validacion; mismo guarda que Helpers/articulos.js aplica a Propiedades.
+        if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+            return res.status(401).json({msg:'idArticulo inválido'});
+        }
         if (!Number.isInteger(item.idArticulo)) {
             return res.status(401).json({msg:'idArticulo inválido'});
         }

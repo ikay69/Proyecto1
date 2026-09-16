@@ -124,19 +124,21 @@ const Terceros = {
     async traerPorId({pId,pEmpId}){
         const [rows] = await pool.query(
             `SELECT 
-                t.Id,
-                t.Nombre,
-                t.Apellidos,
-                t.TipoDocumento,
-                t.NumeroDocumento,
-                t.Celular,
-                t.Email,
-                t.Direccion,
-                t.Estado,
-                t.FechaCreacion,
-                u.Nombres as usuario
+                t.Id                AS terId,
+                t.Nombre            AS terNombres,
+                t.Apellidos         AS terApellidos,
+                t.TipoDocumento     AS terTipDocId,
+                CONCAT(Abreviatura, ' ', Descripcion) AS terTipDocNombre,
+                t.NumeroDocumento   AS terNumDoc,
+                t.Celular           AS terCelular,
+                t.Email             AS terEmail,
+                t.Direccion         AS terDireccion,
+                t.Estado            AS terEstado,
+                t.FechaCreacion     AS terFecCreacion,
+                u.Nombres           AS terUsuario
             FROM Terceros t
             LEFT JOIN Usuarios u on t.UsuarioIdCreador = u.Id 
+            LEFT JOIN TiposDocumentos tp on t.TipoDocumento = tp.Id
             WHERE t.Id = ? and t.EmpresaId = ?;`,
             [pId,pEmpId]
         );

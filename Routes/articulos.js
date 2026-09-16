@@ -73,7 +73,7 @@ router.post('/getallarticulo',[
     validarCampo
 ],articulosControllers.listarTodas);
 
-//listar articulos activos y vendibles (paginado)
+//listar articulos activos  (paginado) servira para mas adelante ya sea para ajustar entradas u otros movimientos difente de ventas, ya que venta tiene su propia ruta
 router.post('/getactivasarticulo',[
     validarJWT,
     validarRol('ADMINISTRADOR','VENDEDOR'),

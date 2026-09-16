@@ -1,6 +1,6 @@
 //validaciones ruta
 
-const CAMPOS_ORDENAR_VALIDOS = [1, 2, 3]; // 1:Nombre, 2:CodigoSKU, 3:FechaCreacion
+const CAMPOS_ORDENAR_VALIDOS = [1, 2, 3, 4]; // 1:Nombre, 2:CodigoSKU, 3:FechaCreacion
 
 const articuloValidaDatos = async (req,res,next) => {
     const {Nombre, Descripcion, PrecioVentaUnitario, Propiedades} = req.body;

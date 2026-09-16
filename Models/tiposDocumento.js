@@ -42,7 +42,7 @@ const TiposDocumento = {
                     td.FechaCreacion as tipDocFecCreacion,
                     u.Nombres as tipDocUsuario
                 FROM TiposDocumentos td
-                left join Usuarios u on td.UsuarioIdCreador = u.Id
+                LEFT JOIN Usuarios u on td.UsuarioIdCreador = u.Id
                     WHERE td.EmpresaId = ?
                     ORDER BY td.${pCampoOrden} ${pOrden}
                     LIMIT 50 OFFSET ?;`,
@@ -77,9 +77,11 @@ const TiposDocumento = {
     async traerActivas({pEmpId}){
         const [rows] = await pool.query(
             `SELECT
-                Id,
-                CONCAT(Abreviatura, ' ', Descripcion) AS Nombre
-            FROM TiposDocumentos WHERE EmpresaId = ? AND Estado = true;`,
+                tp.Id AS tipDocId,
+                CONCAT(tp.Abreviatura, ' ', tp.Descripcion) AS tipDocNombre
+            FROM TiposDocumentos tp 
+            WHERE tp.EmpresaId = ? 
+            AND tp.Estado = true;`,
             [pEmpId]
         );
 
@@ -89,13 +91,13 @@ const TiposDocumento = {
     async traerPorId({pId,pEmpId}){
         const [rows] = await pool.query(
             `SELECT 
-                td.EmpresaId as tipDocEmp,
-                td.Id as tipDocId,
-                td.Abreviatura as tipDocAbreviatura,
-                td.Descripcion as tipDocNombre,
-                td.Estado as tipDocEstado,
+                td.EmpresaId    as tipDocEmp,
+                td.Id           as tipDocId,
+                td.Abreviatura  as tipDocAbreviatura,
+                td.Descripcion  as tipDocNombre,
+                td.Estado       as tipDocEstado,
                 td.FechaCreacion as tipDocFecCreacion,
-                u.Nombres as tipDocUsuario
+                u.Nombres       as tipDocUsuario
             FROM TiposDocumentos td
             left join Usuarios u on td.UsuarioIdCreador = u.Id
             WHERE td.Id = ? and td.EmpresaId = ?;`,

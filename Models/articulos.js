@@ -104,14 +104,27 @@ const Articulos = {
     async traerPorId({pId,pEmpId}){
         const [rows] = await pool.query(
             `SELECT
-                a.Id AS artId, a.EmpresaId AS artEmp, u.Nombres AS artUsuario,
-                a.FechaCreacion AS artFecCreacion, a.ProductoId AS artProductoId,
-                p.Nombre AS artProductoNombre, a.CodigoSKU AS artSKU,
-                a.Nombre AS artNombre, a.Descripcion AS artDescripcion,
-                a.CostoUnitario AS artCosto, a.PrecioVentaUnitario AS artPrecio,
-                a.Vender AS artVender, a.Estado AS artEstado
+                a.Id AS artId, 
+                a.EmpresaId AS artEmp, 
+                u.Nombres AS artUsuario,
+                a.FechaCreacion AS artFecCreacion,
+
+                a.ProductoId AS artProductoId,
+                p.Nombre AS artProductoNombre, 
+                c.Nombre            AS artCategoria,
+                tp.Nombre           AS artTipoProducto,
+                
+                a.CodigoSKU AS artSKU,
+                a.Nombre AS artNombre, 
+                a.Descripcion AS artDescripcion,
+                a.CostoUnitario AS artCosto, 
+                a.PrecioVentaUnitario AS artPrecio,
+                a.Vender AS artVender, 
+                a.Estado AS artEstado
             FROM Articulos a
                 LEFT JOIN Productos p ON p.Id = a.ProductoId
+                LEFT JOIN TiposProductos tp ON tp.Id = p.TipoProductoId
+                LEFT JOIN Categorias c ON c.Id = p.CategoriaId 
                 LEFT JOIN Usuarios u ON u.Id = a.UsuarioIdCreador
             WHERE a.Id = ? AND a.EmpresaId = ?;`,
             [pId,pEmpId]
@@ -125,15 +138,29 @@ const Articulos = {
     async traerTodo({pEmpId,pCampoOrden,pOrden,pOffset,pTexto}){
         const [rows] = await pool.query(
             `SELECT
-                a.Id AS artId, a.CodigoSKU AS artSKU, a.Nombre AS artNombre,
-                a.Descripcion AS artDescripcion, a.CostoUnitario AS artCosto,
-                a.PrecioVentaUnitario AS artPrecio, a.Vender AS artVender,
-                a.Estado AS artEstado, p.Nombre AS artProductoNombre,
-                a.FechaCreacion AS artFecCreacion
+                a.Id AS artId, 
+                a.CodigoSKU AS artSKU, 
+                a.Nombre            AS artNombre,
+                a.Descripcion       AS artDescripcion, 
+                a.CostoUnitario     AS artCosto,
+                a.PrecioVentaUnitario AS artPrecio, 
+                a.Vender            AS artVender,
+                a.Estado            AS artEstado, 
+                c.Nombre            AS artCategoria,
+                tp.Nombre           AS artTipoProducto,
+                IFNULL(
+                    GROUP_CONCAT(CONCAT(pr.Nombre, ':', ap.Valor) SEPARATOR ','), 
+                    ''
+                ) AS artPropiedades
             FROM Articulos a
                 LEFT JOIN Productos p ON p.Id = a.ProductoId
+                LEFT JOIN TiposProductos tp ON tp.Id = p.TipoProductoId
+                LEFT JOIN Categorias c ON c.Id = p.CategoriaId 
+                LEFT JOIN ArticuloPropiedades ap ON ap.ArticuloId = a.Id
+                LEFT JOIN Propiedades pr ON pr.Id = ap.PropiedadId
             WHERE a.EmpresaId = ?
                 AND a.${pCampoOrden} LIKE ?
+            GROUP BY  a.Id, c.Nombre, tp.Nombre
             ORDER BY a.${pCampoOrden} ${pOrden}
             LIMIT 50 OFFSET ?;`,
             [pEmpId,pTexto,pOffset]
@@ -144,10 +171,20 @@ const Articulos = {
     async traerActivas({pEmpId,pCampoOrden,pOrden,pOffset,pTexto}){
         const [rows] = await pool.query(
             `SELECT
-                a.Id AS artId, a.CodigoSKU AS artSKU, a.Nombre AS artNombre,
-                p.Nombre AS artProductoNombre
+                a.Id                AS artId, 
+                a.CodigoSKU         AS artSKU, 
+                a.Nombre            AS artNombre,
+                a.Descripcion       AS artDescripcion, 
+                a.CostoUnitario     AS artCosto,
+                a.PrecioVentaUnitario AS artPrecio, 
+                a.Vender            AS artVender,
+                a.Estado            AS artEstado, 
+                c.Nombre            AS artCategoria,
+                tp.Nombre           AS artTipoProducto
             FROM Articulos a
                 LEFT JOIN Productos p ON p.Id = a.ProductoId
+                LEFT JOIN TiposProductos tp ON tp.Id = p.TipoProductoId
+                LEFT JOIN Categorias c ON c.Id = p.CategoriaId 
             WHERE a.EmpresaId = ? AND a.Estado = true AND a.Vender = true
                 AND a.${pCampoOrden} LIKE ?
             ORDER BY a.${pCampoOrden} ${pOrden}
@@ -165,8 +202,11 @@ const Articulos = {
     async traerVendibles({pEmpId,pCampoOrden,pOrden,pOffset,pTexto}){
         const [rows] = await pool.query(
             `SELECT
-                a.Id AS artId, a.Nombre AS artNombre, a.CodigoSKU AS artSKU,
-                a.PrecioVentaUnitario AS artPrecio, e.Cantidad AS artCantidadDisponible
+                a.Id AS artId, 
+                a.Nombre AS artNombre, 
+                a.CodigoSKU AS artSKU,
+                a.PrecioVentaUnitario AS artPrecio,
+                e.Cantidad AS artCantidadDisponible
             FROM Articulos a
                 INNER JOIN Existencias e ON e.ArticuloId = a.Id AND e.EmpresaId = a.EmpresaId
                     AND e.BolsaEstado = 'DISPONIBLE' AND e.PropietarioId IS NULL AND e.Cantidad > 0

@@ -94,6 +94,12 @@ const tercerosControllers = {
                 if(!existeTipoDocumento){
                     return res.status(401).json({msg:'Tipo de documento invalido'});
                 }
+
+                if(existeTipoDocumento !== vTipoDocumento){
+                    if (existeTipoDocumento.tipDocEstado == 0) {
+                         return res.status(401).json({msg:'Tipo de documento inactivo'});
+                    }
+                }
             }
 
             if(vTipoDocumento !== null && vNumeroDocumento !== null){

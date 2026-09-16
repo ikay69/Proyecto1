@@ -272,3 +272,53 @@ CREATE TABLE OrdenesProduccion(
     CONSTRAINT fk_ordenesproduccion_empresa FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
     CONSTRAINT fk_ordenesproduccion_usuario FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id)
 );
+
+CREATE TABLE Ventas(
+    Id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    EmpresaId           BIGINT UNSIGNED NOT NULL,
+    UsuarioIdCreador    BIGINT UNSIGNED NOT NULL,
+    Estado              BOOLEAN NOT NULL DEFAULT TRUE,
+    FechaCreacion       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    TerceroId           BIGINT UNSIGNED NOT NULL,
+    TerceroTipoDoc      VARCHAR(10) NULL,
+    TerceroNumeroDoc    VARCHAR(50) NULL,
+    TerceroNombre       VARCHAR(300) NOT NULL,
+
+    TipoVenta           VARCHAR(20) NOT NULL,
+
+    ValorSubtotal       DECIMAL(12,2) NOT NULL,
+    ValorDescuento      DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ValorCancelado      DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ValorSaldo          DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ValorEfectivo       DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ValorTransaccion    DECIMAL(12,2) NOT NULL DEFAULT 0,
+    FechaCompromiso     TIMESTAMP NULL,
+
+    NumeroCuotas        INT UNSIGNED NULL,
+    ValorCuota          DECIMAL(12,2) NULL,
+
+    MotivoAnulacion     VARCHAR(300) NULL,
+
+    CONSTRAINT chk_ventas_tipoventa CHECK (TipoVenta IN ('CONTADO','POR_ABONO','CREDITO')),
+    CONSTRAINT fk_ventas_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_ventas_usuario  FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id),
+    CONSTRAINT fk_ventas_tercero  FOREIGN KEY (TerceroId) REFERENCES Terceros(Id)
+);
+
+CREATE TABLE VentaDetalles(
+    Id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    EmpresaId           BIGINT UNSIGNED NOT NULL,
+    VentaId             BIGINT UNSIGNED NOT NULL,
+
+    ArticuloId          BIGINT UNSIGNED NOT NULL,
+    ArticuloNombre      VARCHAR(150) NOT NULL,
+
+    Cantidad            DECIMAL(12,2) NOT NULL,
+    PrecioVentaUnidad   DECIMAL(12,2) NOT NULL,
+
+    CONSTRAINT uq_ventadetalle_articulo UNIQUE (EmpresaId, VentaId, ArticuloId),
+    CONSTRAINT fk_ventadetalle_empresa   FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_ventadetalle_venta     FOREIGN KEY (VentaId) REFERENCES Ventas(Id),
+    CONSTRAINT fk_ventadetalle_articulo  FOREIGN KEY (ArticuloId) REFERENCES Articulos(Id)
+);

@@ -50,11 +50,18 @@ const ventasControllers = {
                 });
             }
 
+            //Terceros.Apellidos es NULL-able en el esquema (el validador de la API lo exige hoy,
+            //pero una fila sembrada directo o heredada puede no tenerlo): concatenar con plantilla
+            //grabaria el literal "NOMBRE null" en un snapshot que ya no se puede corregir. Y como
+            //Nombre(150) + espacio + Apellidos(150) puede dar 301 caracteres contra un
+            //TerceroNombre VARCHAR(300), se recorta antes de que el INSERT falle en modo estricto.
+            const terceroNombreCompleto = [tercero.Nombre, tercero.Apellidos].filter(Boolean).join(' ').trim().slice(0, 300);
+
             const ventaId = await crearVentaContado({
                 pEmpId: idEmpresa, pUsuId: UsuIdLogin, pTerceroId: idTercero,
                 pTerceroTipoDoc: tipoDocAbreviatura,
                 pTerceroNumeroDoc: tercero.NumeroDocumento,
-                pTerceroNombre: `${tercero.Nombre} ${tercero.Apellidos}`.trim(),
+                pTerceroNombre: terceroNombreCompleto,
                 pValorDescuento: ValorDescuento, pValorEfectivo: ValorEfectivo, pValorTransaccion: ValorTransaccion,
                 articulosVendidos: articulosResueltos
             });

@@ -1,4 +1,5 @@
 import { pool } from '../Database/config.js';
+import Articulos from '../Models/articulos.js';
 import Ventas from '../Models/ventas.js';
 import VentaDetalles from '../Models/ventaDetalles.js';
 import TercerosRoles from '../Models/tercrosRoles.js';
@@ -75,6 +76,15 @@ const crearVentaContado = async ({
         });
 
         for (const linea of lineasAgrupadas) {
+            //el costo se guarda en el kardex solo como rastro de auditoria (costo de la mercancia
+            //al momento de venderla, base de cualquier informe de COGS). registrarMovimiento no lo
+            //usa para calcular nada en una SALIDA -- el recosteo promedio solo ocurre en ENTRADA --
+            //asi que la lectura no necesita ir dentro de la transaccion ni usar FOR UPDATE.
+            //Si el articulo no apareciera, se registra null en vez de lanzar: la existencia del
+            //articulo ya la valida el Controller, y esta funcion no agrega validaciones propias.
+            const articulo = await Articulos.traerPorId({pId: linea.idArticulo, pEmpId});
+            const costoActual = articulo ? articulo.artCosto : null;
+
             await registrarMovimiento(connection, {
                 pEmpId, pUsuId,
                 pArticuloId: linea.idArticulo,
@@ -82,7 +92,7 @@ const crearVentaContado = async ({
                 pBolsaEstado: 'DISPONIBLE',
                 pPropietarioId: null,
                 pCantidad: linea.Cantidad,
-                pCostoUnitario: null,
+                pCostoUnitario: costoActual,
                 pMotivo: 'VENTA',
                 pTipoOrigen: 'VENTA',
                 pOrigenId: ventaId,

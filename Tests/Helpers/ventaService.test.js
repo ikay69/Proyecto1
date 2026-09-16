@@ -148,6 +148,9 @@ test('crearVentaContado descuenta existencia y registra la venta con sus lineas'
         assert.equal(movimientos[0].movTipo, 'SALIDA');
         assert.equal(movimientos[0].movBolsa, 'DISPONIBLE');
         assert.equal(Number(movimientos[0].movCantidad), 2);
+        // el kardex guarda el costo vigente del articulo al momento de venderlo (sembrado en 100),
+        // no null: es la unica base para calcular el costo de ventas despues.
+        assert.equal(Number(movimientos[0].movCosto), 100);
 
         // el rol CLIENTE se asigna solo, sin que el llamador tenga que pedirlo
         const rol = await TercerosRoles.traerPorTerceroRol({pEmpId:1, pTerId:terceroId, pRol:'CLIENTE'});

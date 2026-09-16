@@ -94,8 +94,9 @@ const tercerosControllers = {
                 if(!existeTipoDocumento){
                     return res.status(401).json({msg:'Tipo de documento invalido'});
                 }
-
-                if(existeTipoDocumento !== vTipoDocumento){
+               
+                // si no se acutaliza tipo documento no validarlo
+                if(existeTercero.terTipDocId !== vTipoDocumento){
                     if (existeTipoDocumento.tipDocEstado == 0) {
                          return res.status(401).json({msg:'Tipo de documento inactivo'});
                     }

@@ -89,3 +89,76 @@ test('editar reemplaza el set de propiedades', async () => {
         }
     }
 });
+
+test('traerVendibles solo devuelve articulos Vender=true, Estado=true, con existencia DISPONIBLE > 0', async () => {
+    const { productoId, usuarioId } = await obtenerProductoYUsuarioDePrueba();
+
+    let idVendible, idNoVendible, idSinExistencia;
+    try {
+        idVendible = await Articulos.crear({
+            pEmpId:1, pUsuIdCrea:usuarioId, pProductoId:productoId,
+            pNombre:'ARTICULO VENDIBLE DE PRUEBA', pDescripcion:null, pPrecioVentaUnitario:100, pPropiedades:[]
+        });
+        await pool.query(
+            `INSERT INTO Existencias(EmpresaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, 'DISPONIBLE', 5);`,
+            [idVendible]
+        );
+
+        idNoVendible = await Articulos.crear({
+            pEmpId:1, pUsuIdCrea:usuarioId, pProductoId:productoId,
+            pNombre:'ARTICULO NO VENDIBLE DE PRUEBA', pDescripcion:null, pPrecioVentaUnitario:100, pPropiedades:[]
+        });
+        await Articulos.editar({
+            pEmpId:1, pId:idNoVendible, pProductoId:productoId,
+            pNombre:'ARTICULO NO VENDIBLE DE PRUEBA', pDescripcion:null, pPrecioVentaUnitario:100,
+            pVender:false, pEstado:true, pPropiedades:[]
+        });
+        await pool.query(
+            `INSERT INTO Existencias(EmpresaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, 'DISPONIBLE', 5);`,
+            [idNoVendible]
+        );
+
+        idSinExistencia = await Articulos.crear({
+            pEmpId:1, pUsuIdCrea:usuarioId, pProductoId:productoId,
+            pNombre:'ARTICULO SIN EXISTENCIA DE PRUEBA', pDescripcion:null, pPrecioVentaUnitario:100, pPropiedades:[]
+        });
+
+        const resultado = await Articulos.traerVendibles({pEmpId:1, pCampoOrden:'Nombre', pOrden:'ASC', pOffset:0, pTexto:'%%'});
+        const ids = resultado.map(r => r.artId);
+
+        assert.ok(ids.includes(idVendible));
+        assert.ok(!ids.includes(idNoVendible));
+        assert.ok(!ids.includes(idSinExistencia));
+    } finally {
+        for (const id of [idVendible, idNoVendible, idSinExistencia]) {
+            if (id) {
+                await pool.query(`DELETE FROM Existencias WHERE ArticuloId = ?;`, [id]);
+                await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [id]);
+            }
+        }
+    }
+});
+
+test('contarVendiblesFiltro cuenta lo mismo que traerVendibles devuelve', async () => {
+    const { productoId, usuarioId } = await obtenerProductoYUsuarioDePrueba();
+
+    let idVendible;
+    try {
+        idVendible = await Articulos.crear({
+            pEmpId:1, pUsuIdCrea:usuarioId, pProductoId:productoId,
+            pNombre:'ARTICULO VENDIBLE PARA CONTEO', pDescripcion:null, pPrecioVentaUnitario:100, pPropiedades:[]
+        });
+        await pool.query(
+            `INSERT INTO Existencias(EmpresaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, 'DISPONIBLE', 3);`,
+            [idVendible]
+        );
+
+        const total = await Articulos.contarVendiblesFiltro({pEmpId:1, pCampoOrden:'Nombre', pTexto:'%VENDIBLE PARA CONTEO%'});
+        assert.equal(total, 1);
+    } finally {
+        if (idVendible) {
+            await pool.query(`DELETE FROM Existencias WHERE ArticuloId = ?;`, [idVendible]);
+            await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [idVendible]);
+        }
+    }
+});

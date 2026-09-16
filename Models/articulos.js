@@ -157,6 +157,40 @@ const Articulos = {
         return rows || [];
     },
 
+    //la "ventanilla" de venta: solo articulos que se pueden vender y que tienen algo
+    //disponible para vender. El join con Existencias nunca duplica filas porque
+    //uq_existencias_bolsa (EmpresaId, ArticuloId, BolsaEstado, PropietarioIdClave) garantiza
+    //una sola fila DISPONIBLE sin propietario por articulo dentro de la misma empresa; por eso
+    //el join tambien amarra e.EmpresaId = a.EmpresaId, que es la primera columna de esa unique.
+    async traerVendibles({pEmpId,pCampoOrden,pOrden,pOffset,pTexto}){
+        const [rows] = await pool.query(
+            `SELECT
+                a.Id AS artId, a.Nombre AS artNombre, a.CodigoSKU AS artSKU,
+                a.PrecioVentaUnitario AS artPrecio, e.Cantidad AS artCantidadDisponible
+            FROM Articulos a
+                INNER JOIN Existencias e ON e.ArticuloId = a.Id AND e.EmpresaId = a.EmpresaId
+                    AND e.BolsaEstado = 'DISPONIBLE' AND e.PropietarioId IS NULL AND e.Cantidad > 0
+            WHERE a.EmpresaId = ? AND a.Estado = true AND a.Vender = true
+                AND a.${pCampoOrden} LIKE ?
+            ORDER BY a.${pCampoOrden} ${pOrden}
+            LIMIT 50 OFFSET ?;`,
+            [pEmpId,pTexto,pOffset]
+        );
+        return rows || [];
+    },
+
+    async contarVendiblesFiltro({pEmpId,pCampoOrden,pTexto}){
+        const [rows] = await pool.query(
+            `SELECT COUNT(*) AS total
+            FROM Articulos a
+                INNER JOIN Existencias e ON e.ArticuloId = a.Id AND e.EmpresaId = a.EmpresaId
+                    AND e.BolsaEstado = 'DISPONIBLE' AND e.PropietarioId IS NULL AND e.Cantidad > 0
+            WHERE a.EmpresaId = ? AND a.Estado = true AND a.Vender = true AND a.${pCampoOrden} LIKE ?;`,
+            [pEmpId,pTexto]
+        );
+        return rows[0].total;
+    },
+
     async contarTodoFiltro({pEmpId,pCampoOrden,pTexto}){
         const [rows] = await pool.query(
             `SELECT COUNT(*) AS total FROM Articulos

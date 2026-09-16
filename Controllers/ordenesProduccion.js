@@ -1,6 +1,7 @@
 import Articulos from '../Models/articulos.js';
 import OrdenesProduccion from '../Models/ordenesProduccion.js';
 import Movimientos from '../Models/movimientos.js';
+import Terceros from '../Models/terceros.js';
 import { crearOrdenProduccion } from '../Helpers/produccionService.js';
 
 const ordenesProduccionControllers = {
@@ -17,6 +18,16 @@ const ordenesProduccionControllers = {
                 const existeArticulo = await Articulos.traerPorId({pId:producido.idArticulo, pEmpId:idEmpresa});
                 if (!existeArticulo) {
                     return res.status(401).json({msg:`Articulo ${producido.idArticulo} inválido`});
+                }
+            }
+
+            //el propietario de cada bolsa consumida tampoco lo valida crearOrdenProduccion:
+            //sin esta comprobacion se descontaria la bolsa de un Tercero de otra empresa.
+            for (const consumo of consumos) {
+                if (consumo.idPropietario === undefined || consumo.idPropietario === null) continue;
+                const existePropietario = await Terceros.traerPorId({pId:consumo.idPropietario, pEmpId:idEmpresa});
+                if (!existePropietario) {
+                    return res.status(401).json({msg:`Propietario ${consumo.idPropietario} inválido`});
                 }
             }
 

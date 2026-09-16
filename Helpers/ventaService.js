@@ -56,6 +56,24 @@ const crearVentaContado = async ({
         await TercerosRoles.crear({pEmpId, pTerId:pTerceroId, pRol:'CLIENTE', pUsuId});
     }
 
+    //el costo de cada articulo se guarda en el kardex solo como rastro de auditoria (costo de la
+    //mercancia al momento de venderla, base de cualquier informe de COGS). registrarMovimiento no
+    //lo usa para calcular nada en una SALIDA -- el recosteo promedio solo ocurre en ENTRADA -- asi
+    //que no necesita FOR UPDATE ni la conexion de la transaccion.
+    //Se resuelve TODO aqui, antes de pedir la conexion de la transaccion, y NO dentro del bucle de
+    //movimientos: pedir una segunda conexion del pool mientras la transaccion ya tiene una tomada
+    //puede colgar el proceso. Con connectionLimit=10 y queueLimit=0 (espera ilimitada, sin timeout)
+    //en Database/config.js, 10 ventas concurrentes reteniendo su conexion y pidiendo una segunda a
+    //la vez se bloquean entre si para siempre. De paso, sacar estas lecturas del bucle acorta
+    //cuanto tiempo se retienen los locks de Existencias dentro de la transaccion.
+    const costosPorArticulo = new Map();
+    for (const linea of lineasAgrupadas) {
+        const articulo = await Articulos.traerPorId({pId: linea.idArticulo, pEmpId});
+        //si el articulo no apareciera se registra null en vez de lanzar: su existencia ya la valida
+        //el Controller, y esta funcion no agrega validaciones propias.
+        costosPorArticulo.set(linea.idArticulo, articulo ? articulo.artCosto : null);
+    }
+
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -75,16 +93,8 @@ const crearVentaContado = async ({
             }))
         });
 
+        //este bucle ya no toca el pool: solo usa `connection`, la conexion de esta transaccion.
         for (const linea of lineasAgrupadas) {
-            //el costo se guarda en el kardex solo como rastro de auditoria (costo de la mercancia
-            //al momento de venderla, base de cualquier informe de COGS). registrarMovimiento no lo
-            //usa para calcular nada en una SALIDA -- el recosteo promedio solo ocurre en ENTRADA --
-            //asi que la lectura no necesita ir dentro de la transaccion ni usar FOR UPDATE.
-            //Si el articulo no apareciera, se registra null en vez de lanzar: la existencia del
-            //articulo ya la valida el Controller, y esta funcion no agrega validaciones propias.
-            const articulo = await Articulos.traerPorId({pId: linea.idArticulo, pEmpId});
-            const costoActual = articulo ? articulo.artCosto : null;
-
             await registrarMovimiento(connection, {
                 pEmpId, pUsuId,
                 pArticuloId: linea.idArticulo,
@@ -92,7 +102,7 @@ const crearVentaContado = async ({
                 pBolsaEstado: 'DISPONIBLE',
                 pPropietarioId: null,
                 pCantidad: linea.Cantidad,
-                pCostoUnitario: costoActual,
+                pCostoUnitario: costosPorArticulo.get(linea.idArticulo) ?? null,
                 pMotivo: 'VENTA',
                 pTipoOrigen: 'VENTA',
                 pOrigenId: ventaId,

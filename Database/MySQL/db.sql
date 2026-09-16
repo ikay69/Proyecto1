@@ -303,7 +303,9 @@ CREATE TABLE Ventas(
     CONSTRAINT chk_ventas_tipoventa CHECK (TipoVenta IN ('CONTADO','POR_ABONO','CREDITO')),
     CONSTRAINT fk_ventas_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
     CONSTRAINT fk_ventas_usuario  FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id),
-    CONSTRAINT fk_ventas_tercero  FOREIGN KEY (TerceroId) REFERENCES Terceros(Id)
+    CONSTRAINT fk_ventas_tercero  FOREIGN KEY (TerceroId) REFERENCES Terceros(Id),
+
+    INDEX idx_ventas_listado (EmpresaId, FechaCreacion)
 );
 
 CREATE TABLE VentaDetalles(

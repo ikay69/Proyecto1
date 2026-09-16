@@ -19,6 +19,9 @@ const Ventas = {
         return rows.insertId;
     },
 
+    //FechaCreacion es un TIMESTAMP con granularidad de segundo: varias ventas del mismo segundo
+    //no tienen orden definido entre si, y sin desempate una misma fila puede repetirse o
+    //desaparecer al cambiar de pagina. v.Id DESC lo vuelve determinista.
     async traerTodo({pEmpId, pOffset}){
         const [rows] = await pool.query(
             `SELECT
@@ -28,7 +31,7 @@ const Ventas = {
                 v.ValorSaldo AS ventaSaldo, v.Estado AS ventaEstado
             FROM Ventas v
             WHERE v.EmpresaId = ?
-            ORDER BY v.FechaCreacion DESC
+            ORDER BY v.FechaCreacion DESC, v.Id DESC
             LIMIT 50 OFFSET ?;`,
             [pEmpId, pOffset]
         );

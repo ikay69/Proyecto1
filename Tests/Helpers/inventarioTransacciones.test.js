@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { withRollback } from '../dbTestUtils.js';
 import { registrarMovimiento, transferirEntreBolsas } from '../../Helpers/inventarioTransacciones.js';
 import Existencias from '../../Models/existencias.js';
-import Articulos from '../../Models/articulos.js';
 
 // Articulos.CodigoSKU es VARCHAR(12) con UNIQUE (EmpresaId, CodigoSKU): 'T' + tiempo en
 // base36 (8) + 2 caracteres al azar = 11 caracteres, igual que en Tests/Models.
@@ -44,10 +43,9 @@ test('registrarMovimiento ENTRADA a DISPONIBLE actualiza existencia y costo prom
         const bolsa = await Existencias.traerBolsaBloqueada(connection, {
             pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
         });
-        const articulo = await Articulos.traerPorIdConexion(connection, { pId: articuloId, pEmpId: 1 });
 
         assert.equal(Number(bolsa.Cantidad), 20);
-        assert.equal(Number(articulo.CostoUnitario), 60);
+        assert.equal(Number(bolsa.CostoUnitario), 60);
     });
 });
 
@@ -109,14 +107,14 @@ const sembrarArticuloConExistencia = async (pool, { pCantidad, pCosto }) => {
         const [productoRows] = await conn.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
         const [usuarioRows] = await conn.query(`SELECT Id FROM Usuarios LIMIT 1;`);
         const [insertResult] = await conn.query(
-            `INSERT INTO Articulos(EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU, Nombre, CostoUnitario)
-             VALUES (1, ?, ?, ?, 'ARTICULO TRANSFERENCIA', ?);`,
-            [usuarioRows[0].Id, productoRows[0].Id, generarSKUDePrueba('R'), pCosto]
+            `INSERT INTO Articulos(EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU, Nombre)
+             VALUES (1, ?, ?, ?, 'ARTICULO TRANSFERENCIA');`,
+            [usuarioRows[0].Id, productoRows[0].Id, generarSKUDePrueba('R')]
         );
         const articuloId = insertResult.insertId;
-        await Existencias.upsertCantidad(conn, {
+        await Existencias.upsertCantidadYCosto(conn, {
             pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
-            pPropietarioId: null, pDelta: pCantidad
+            pPropietarioId: null, pDelta: pCantidad, pCosto: pCosto
         });
         await conn.commit();
         return { articuloId, usuarioId: usuarioRows[0].Id };
@@ -146,12 +144,11 @@ const leerEstadoArticulo = async (pool, articuloId) => {
         const reservado = await Existencias.traerBolsaBloqueada(conn, {
             pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'RESERVADO', pPropietarioId: null
         });
-        const articulo = await Articulos.traerPorIdConexion(conn, { pId: articuloId, pEmpId: 1 });
         const [movimientos] = await conn.query(
             `SELECT TipoMovimiento, BolsaEstado, Cantidad FROM Movimientos WHERE ArticuloId = ? ORDER BY Id ASC;`,
             [articuloId]
         );
-        return { disponible, reservado, articulo, movimientos };
+        return { disponible, reservado, movimientos };
     } finally {
         conn.release();
     }
@@ -181,8 +178,8 @@ test('transferirEntreBolsas mueve cantidad de una bolsa a otra atomicamente', as
 
         assert.equal(Number(estado.disponible.Cantidad), 6);
         assert.equal(Number(estado.reservado.Cantidad), 4);
-        // la ENTRADA a RESERVADO no es una compra: no debe recostear el articulo
-        assert.equal(Number(estado.articulo.CostoUnitario), 40);
+        // la ENTRADA a RESERVADO no es una compra: no debe recostear la bolsa DISPONIBLE
+        assert.equal(Number(estado.disponible.CostoUnitario), 40);
         // ambas mitades quedaron en el kardex
         assert.equal(estado.movimientos.length, 2);
         assert.equal(estado.movimientos[0].TipoMovimiento, 'SALIDA');

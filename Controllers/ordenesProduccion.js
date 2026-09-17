@@ -10,7 +10,7 @@ const ordenesProduccionControllers = {
             const {idEmpresa, Observaciones, consumos, producidos} = req.body;
             const UsuIdLogin = req.usuario.Id;
 
-            //crearOrdenProduccion ya valida la tenencia de cada consumo (Articulos.traerPorIdConexion
+            //crearOrdenProduccion ya valida la existencia de cada consumo (Articulos.traerPorId
             //dentro de la transaccion), pero NO la de los producidos: sin esta comprobacion un
             //idArticulo de otra empresa recibiria Existencias/Movimientos marcados con la EmpresaId
             //del llamador. Se revisan TODOS los producidos aqui, antes de abrir la transaccion.

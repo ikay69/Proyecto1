@@ -178,7 +178,6 @@ CREATE TABLE Articulos(
     Nombre              VARCHAR(150) NOT NULL,
     Descripcion         VARCHAR(300) NULL,
 
-    CostoUnitario       DECIMAL(12,2) NULL,
     PrecioVentaUnitario DECIMAL(12,2) NULL,
     Vender              BOOLEAN NOT NULL DEFAULT TRUE,
     Estado              BOOLEAN NOT NULL DEFAULT TRUE,
@@ -210,6 +209,7 @@ CREATE TABLE Existencias(
     PropietarioId       BIGINT UNSIGNED NULL,
     PropietarioIdClave  BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(PropietarioId, 0)) STORED,
     Cantidad            DECIMAL(12,2) NOT NULL DEFAULT 0,
+    CostoUnitario       DECIMAL(12,2) NULL,
     FechaActualizacion  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT chk_existencias_bolsaestado CHECK (BolsaEstado IN (

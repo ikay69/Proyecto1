@@ -75,32 +75,6 @@ const Articulos = {
         }
     },
 
-    async editarCosto({pEmpId,pId,pCosto}){
-        const [rows] = await pool.query(
-            `UPDATE Articulos SET CostoUnitario = ? WHERE EmpresaId = ? AND Id = ?;`,
-            [pCosto,pEmpId,pId]
-        );
-        return rows.affectedRows;
-    },
-
-    //variantes que reciben la conexion de una transaccion externa (recosteo de inventario):
-    //el SELECT ... FOR UPDATE bloquea la fila hasta que esa transaccion termine.
-    async traerPorIdConexion(connection, {pId,pEmpId}){
-        const [rows] = await connection.query(
-            `SELECT Id, CostoUnitario FROM Articulos WHERE Id = ? AND EmpresaId = ? FOR UPDATE;`,
-            [pId,pEmpId]
-        );
-        return rows[0] || null;
-    },
-
-    async editarCostoConexion(connection, {pEmpId,pId,pCosto}){
-        const [rows] = await connection.query(
-            `UPDATE Articulos SET CostoUnitario = ? WHERE EmpresaId = ? AND Id = ?;`,
-            [pCosto,pEmpId,pId]
-        );
-        return rows.affectedRows;
-    },
-
     async traerPorId({pId,pEmpId}){
         const [rows] = await pool.query(
             `SELECT
@@ -115,11 +89,10 @@ const Articulos = {
                 tp.Nombre           AS artTipoProducto,
                 
                 a.CodigoSKU AS artSKU,
-                a.Nombre AS artNombre, 
+                a.Nombre AS artNombre,
                 a.Descripcion AS artDescripcion,
-                a.CostoUnitario AS artCosto, 
                 a.PrecioVentaUnitario AS artPrecio,
-                a.Vender AS artVender, 
+                a.Vender AS artVender,
                 a.Estado AS artEstado
             FROM Articulos a
                 LEFT JOIN Productos p ON p.Id = a.ProductoId
@@ -141,21 +114,20 @@ const Articulos = {
                 a.Id AS artId, 
                 a.CodigoSKU AS artSKU, 
                 a.Nombre            AS artNombre,
-                a.Descripcion       AS artDescripcion, 
-                a.CostoUnitario     AS artCosto,
-                a.PrecioVentaUnitario AS artPrecio, 
+                a.Descripcion       AS artDescripcion,
+                a.PrecioVentaUnitario AS artPrecio,
                 a.Vender            AS artVender,
-                a.Estado            AS artEstado, 
+                a.Estado            AS artEstado,
                 c.Nombre            AS artCategoria,
                 tp.Nombre           AS artTipoProducto,
                 IFNULL(
-                    GROUP_CONCAT(CONCAT(pr.Nombre, ':', ap.Valor) SEPARATOR ','), 
+                    GROUP_CONCAT(CONCAT(pr.Nombre, ':', ap.Valor) SEPARATOR ','),
                     ''
                 ) AS artPropiedades
             FROM Articulos a
                 LEFT JOIN Productos p ON p.Id = a.ProductoId
                 LEFT JOIN TiposProductos tp ON tp.Id = p.TipoProductoId
-                LEFT JOIN Categorias c ON c.Id = p.CategoriaId 
+                LEFT JOIN Categorias c ON c.Id = p.CategoriaId
                 LEFT JOIN ArticuloPropiedades ap ON ap.ArticuloId = a.Id
                 LEFT JOIN Propiedades pr ON pr.Id = ap.PropiedadId
             WHERE a.EmpresaId = ?
@@ -174,21 +146,20 @@ const Articulos = {
                 a.Id                AS artId, 
                 a.CodigoSKU         AS artSKU, 
                 a.Nombre            AS artNombre,
-                a.Descripcion       AS artDescripcion, 
-                a.CostoUnitario     AS artCosto,
-                a.PrecioVentaUnitario AS artPrecio, 
+                a.Descripcion       AS artDescripcion,
+                a.PrecioVentaUnitario AS artPrecio,
                 a.Vender            AS artVender,
-                a.Estado            AS artEstado, 
+                a.Estado            AS artEstado,
                 c.Nombre            AS artCategoria,
                 tp.Nombre           AS artTipoProducto,
                 IFNULL(
-                    GROUP_CONCAT(CONCAT(pr.Nombre, ':', ap.Valor) SEPARATOR ','), 
+                    GROUP_CONCAT(CONCAT(pr.Nombre, ':', ap.Valor) SEPARATOR ','),
                     ''
                 ) AS artPropiedades
             FROM Articulos a
                 LEFT JOIN Productos p ON p.Id = a.ProductoId
                 LEFT JOIN TiposProductos tp ON tp.Id = p.TipoProductoId
-                LEFT JOIN Categorias c ON c.Id = p.CategoriaId 
+                LEFT JOIN Categorias c ON c.Id = p.CategoriaId
                 LEFT JOIN ArticuloPropiedades ap ON ap.ArticuloId = a.Id
                 LEFT JOIN Propiedades pr ON pr.Id = ap.PropiedadId
             WHERE a.EmpresaId = ? AND a.Estado = true AND a.Vender = true

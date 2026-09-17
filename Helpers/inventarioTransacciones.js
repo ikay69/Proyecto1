@@ -1,7 +1,6 @@
 import { pool } from '../Database/config.js';
 import Existencias from '../Models/existencias.js';
 import Movimientos from '../Models/movimientos.js';
-import Articulos from '../Models/articulos.js';
 import { calcularCostoPromedioPonderado } from './costeoInventario.js';
 import { validarPropietarioBolsa } from './existenciaReglas.js';
 
@@ -42,21 +41,23 @@ const registrarMovimiento = async (connection, datos) => {
 
     const delta = pTipoMovimiento === 'SALIDA' ? -Number(pCantidad) : Number(pCantidad);
 
-    await Existencias.upsertCantidad(connection, {
-        pEmpId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId, pDelta: delta
-    });
-
-    //el costo promedio ponderado solo se recalcula cuando entra mercancia a la bolsa DISPONIBLE:
-    //las demas bolsas son custodia temporal (taller, garantia, reserva) y no alteran el costo.
+    //el costo promedio ponderado vive en la propia bolsa de Existencias (ya no en Articulos) y
+    //solo se recalcula cuando entra mercancia a la bolsa DISPONIBLE: las demas bolsas son
+    //custodia temporal (taller, garantia, reserva) y no alteran el costo.
     if (pTipoMovimiento === 'ENTRADA' && pBolsaEstado === 'DISPONIBLE') {
-        const articulo = await Articulos.traerPorIdConexion(connection, { pId: pArticuloId, pEmpId });
         const nuevoCosto = calcularCostoPromedioPonderado({
             cantidadActual,
-            costoActual: articulo ? articulo.CostoUnitario : null,
+            costoActual: bolsaActual ? bolsaActual.CostoUnitario : null,
             cantidadEntrante: pCantidad,
             costoEntrante: pCostoUnitario
         });
-        await Articulos.editarCostoConexion(connection, { pEmpId, pId: pArticuloId, pCosto: nuevoCosto });
+        await Existencias.upsertCantidadYCosto(connection, {
+            pEmpId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId, pDelta: delta, pCosto: nuevoCosto
+        });
+    } else {
+        await Existencias.upsertCantidad(connection, {
+            pEmpId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId, pDelta: delta
+        });
     }
 
     const movimientoId = await Movimientos.insertar(connection, {

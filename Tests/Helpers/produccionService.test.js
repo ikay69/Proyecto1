@@ -31,14 +31,14 @@ const sembrarArticuloConExistencia = async ({empId, usuarioId, productoId, canti
     try {
         await conn.beginTransaction();
         const [insertResult] = await conn.query(
-            `INSERT INTO Articulos(EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU, Nombre, CostoUnitario)
-             VALUES (?, ?, ?, ?, 'MATERIA PRIMA DE PRUEBA', ?);`,
-            [empId, usuarioId, productoId, generarSKUDePrueba('M'), costo]
+            `INSERT INTO Articulos(EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU, Nombre)
+             VALUES (?, ?, ?, ?, 'MATERIA PRIMA DE PRUEBA');`,
+            [empId, usuarioId, productoId, generarSKUDePrueba('M')]
         );
         const articuloId = insertResult.insertId;
-        await Existencias.upsertCantidad(conn, {
+        await Existencias.upsertCantidadYCosto(conn, {
             pEmpId: empId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
-            pPropietarioId: null, pDelta: cantidad
+            pPropietarioId: null, pDelta: cantidad, pCosto: costo
         });
         await conn.commit();
         return articuloId;
@@ -93,11 +93,10 @@ test('crearOrdenProduccion consume materia prima y produce un articulo nuevo con
             const bolsaJoya = await Existencias.traerBolsaBloqueada(connVerif, {
                 pEmpId: 1, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
             });
-            const joya = await Articulos.traerPorIdConexion(connVerif, { pId: joyaId, pEmpId: 1 });
 
             assert.equal(Number(bolsaMateriaPrima.Cantidad), 6);
             assert.equal(Number(bolsaJoya.Cantidad), 1);
-            assert.equal(Number(joya.CostoUnitario), 400); // 4 unidades consumidas * costo 100 / 1 producida
+            assert.equal(Number(bolsaJoya.CostoUnitario), 400); // 4 unidades consumidas * costo 100 / 1 producida
         } finally {
             connVerif.release();
         }
@@ -136,8 +135,10 @@ test('crearOrdenProduccion respeta un costoUnitario explicito en el producido', 
 
         const connVerif = await pool.getConnection();
         try {
-            const joya = await Articulos.traerPorIdConexion(connVerif, { pId: joyaId, pEmpId: 1 });
-            assert.equal(Number(joya.CostoUnitario), 500);
+            const bolsaJoya = await Existencias.traerBolsaBloqueada(connVerif, {
+                pEmpId: 1, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+            });
+            assert.equal(Number(bolsaJoya.CostoUnitario), 500);
         } finally {
             connVerif.release();
         }
@@ -191,7 +192,6 @@ test('crearOrdenProduccion revierte toda la orden si un consumo posterior falla'
             const bolsaJoya = await Existencias.traerBolsaBloqueada(connVerif, {
                 pEmpId: 1, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
             });
-            const joya = await Articulos.traerPorIdConexion(connVerif, { pId: joyaId, pEmpId: 1 });
             const [movimientos] = await connVerif.query(
                 `SELECT Id FROM Movimientos WHERE ArticuloId IN (?,?,?);`,
                 [materiaPrimaId, materiaPrimaSinSaldoId, joyaId]
@@ -201,7 +201,6 @@ test('crearOrdenProduccion revierte toda la orden si un consumo posterior falla'
             assert.equal(Number(bolsaMateriaPrima.Cantidad), 10);
             // el articulo producido nunca llego a existir en inventario ni a recostearse
             assert.equal(bolsaJoya, null);
-            assert.equal(joya.CostoUnitario, null);
             // ningun movimiento quedo en el kardex
             assert.equal(movimientos.length, 0);
         } finally {

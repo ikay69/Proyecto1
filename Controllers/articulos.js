@@ -139,6 +139,8 @@ const articulosControllers = {
         }
     },
 
+    //el costo unitario ya no vive en Articulos: este ajuste manual escribe (o crea, si aun no
+    //existia) la bolsa DISPONIBLE/sin propietario en Existencias, sin tocar su Cantidad.
     editarCosto: async (req,res) => {
         try {
             const {idEmpresa, idArticulo, nuevoCosto} = req.body;
@@ -152,14 +154,13 @@ const articulosControllers = {
                 return res.status(401).json({msg:'Articulo inválido'});
             }
 
-            const filasActualizadas = await Articulos.editarCosto({
-                pEmpId: idEmpresa, pId: idArticulo, pCosto: Number(nuevoCosto)
+            await Existencias.editarCosto({
+                pEmpId: idEmpresa, pArticuloId: idArticulo,
+                pBolsaEstado: 'DISPONIBLE', pPropietarioId: null,
+                pCosto: Number(nuevoCosto)
             });
 
-            if (filasActualizadas > 0) {
-                return res.status(200).json({msg:'Costo actualizado'});
-            }
-            return res.status(401).json({msg:'Error en actualización'});
+            return res.status(200).json({msg:'Costo actualizado'});
         } catch (error) {
             return res.status(500).json({msg:String(error)});
         }

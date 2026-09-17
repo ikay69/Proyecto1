@@ -1,6 +1,7 @@
 import { pool } from '../Database/config.js';
 import OrdenesProduccion from '../Models/ordenesProduccion.js';
 import Articulos from '../Models/articulos.js';
+import Existencias from '../Models/existencias.js';
 import { registrarMovimiento } from './inventarioTransacciones.js';
 import { calcularCostoProduccion, calcularCostoUnitarioProducido } from './costeoInventario.js';
 
@@ -25,13 +26,18 @@ const crearOrdenProduccion = async ({ pEmpId, pUsuId, pObservaciones, consumos, 
 
         const consumosConCosto = [];
         for (const consumo of consumos) {
-            //el costo de lo consumido NO lo decide el llamador: es el costo promedio vigente del
-            //articulo, leido con FOR UPDATE dentro de esta misma transaccion.
-            const articulo = await Articulos.traerPorIdConexion(connection, { pId: consumo.idArticulo, pEmpId });
-            if (!articulo) {
+            const existeArticulo = await Articulos.traerPorId({ pId: consumo.idArticulo, pEmpId });
+            if (!existeArticulo) {
                 throw new Error(`El artículo ${consumo.idArticulo} no existe en esta empresa`);
             }
-            const costoUnitarioConsumo = articulo.CostoUnitario;
+
+            //el costo de lo consumido NO lo decide el llamador: es el costo promedio vigente de la
+            //bolsa DISPONIBLE del articulo (el costo vive en Existencias, no en Articulos), leido
+            //con FOR UPDATE dentro de esta misma transaccion.
+            const bolsaDisponible = await Existencias.traerBolsaBloqueada(connection, {
+                pEmpId, pArticuloId: consumo.idArticulo, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+            });
+            const costoUnitarioConsumo = bolsaDisponible ? bolsaDisponible.CostoUnitario : null;
 
             await registrarMovimiento(connection, {
                 pEmpId, pUsuId,

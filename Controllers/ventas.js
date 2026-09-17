@@ -1,6 +1,7 @@
 import Terceros from '../Models/terceros.js';
 import TiposDocumento from '../Models/tiposDocumento.js';
 import Articulos from '../Models/articulos.js';
+import Existencias from '../Models/existencias.js';
 import Ventas from '../Models/ventas.js';
 import VentaDetalles from '../Models/ventaDetalles.js';
 import { crearVentaContado } from '../Helpers/ventaService.js';
@@ -31,22 +32,26 @@ const ventasControllers = {
             }
 
             //cada idArticulo se valida y se resuelve su Nombre AQUI, antes de la transaccion:
-            //el snapshot de VentaDetalles nunca usa un nombre que mande el cliente. De la misma
-            //lectura sale CostoUnitario (artCosto), que el servicio guarda en el kardex como
-            //rastro de auditoria: leerlo aqui evita que el servicio vuelva a consultar cada
-            //articulo (2N consultas en vez de N) y cierra la ventana TOCTOU entre ambas lecturas.
+            //el snapshot de VentaDetalles nunca usa un nombre que mande el cliente. De la bolsa
+            //DISPONIBLE en Existencias sale CostoUnitario (el costo ya no vive en Articulos), que
+            //el servicio guarda en el kardex como rastro de auditoria: leerlo aqui evita que el
+            //servicio vuelva a consultar cada articulo (2N consultas en vez de N) y cierra la
+            //ventana TOCTOU entre ambas lecturas.
             const articulosResueltos = [];
             for (const item of articulosBody) {
                 const articulo = await Articulos.traerPorId({pId:item.idArticulo, pEmpId:idEmpresa});
                 if (!articulo || !articulo.artEstado || !articulo.artVender) {
                     return res.status(401).json({msg:`Articulo ${item.idArticulo} no disponible para la venta`});
                 }
+                const bolsaDisponible = await Existencias.traerBolsa({
+                    pEmpId:idEmpresa, pArticuloId:item.idArticulo, pBolsaEstado:'DISPONIBLE', pPropietarioId:null
+                });
                 articulosResueltos.push({
                     idArticulo: item.idArticulo,
                     ArticuloNombre: articulo.artNombre,
                     Cantidad: item.Cantidad,
                     PrecioVentaUnidad: item.PrecioVentaUnidad,
-                    CostoUnitario: articulo.artCosto
+                    CostoUnitario: bolsaDisponible ? bolsaDisponible.CostoUnitario : null
                 });
             }
 

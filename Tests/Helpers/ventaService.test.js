@@ -32,14 +32,14 @@ const sembrarArticuloConExistencia = async ({empId, usuarioId, productoId, canti
     try {
         await conn.beginTransaction();
         const [insertResult] = await conn.query(
-            `INSERT INTO Articulos(EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU, Nombre, CostoUnitario)
-             VALUES (?, ?, ?, ?, 'ARTICULO DE VENTA DE PRUEBA', ?);`,
-            [empId, usuarioId, productoId, generarSKUDePrueba(), costo]
+            `INSERT INTO Articulos(EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU, Nombre)
+             VALUES (?, ?, ?, ?, 'ARTICULO DE VENTA DE PRUEBA');`,
+            [empId, usuarioId, productoId, generarSKUDePrueba()]
         );
         const articuloId = insertResult.insertId;
-        await Existencias.upsertCantidad(conn, {
+        await Existencias.upsertCantidadYCosto(conn, {
             pEmpId: empId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
-            pPropietarioId: null, pDelta: cantidad
+            pPropietarioId: null, pDelta: cantidad, pCosto: costo
         });
         await conn.commit();
         return articuloId;

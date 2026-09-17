@@ -1,7 +1,7 @@
 import {Router} from 'express';
 import { check,body } from 'express-validator';
 import { validarRol } from '../Middlewares/validarRoles.js';
-import { validarCampo } from '../middlewares/validarCampos.js';
+import { validarCampo } from '../Middlewares/validarCampos.js';
 import { validarJWT } from '../Middlewares/validarJwt.js';
 import { validarUsuarioEmpresa } from '../Middlewares/validarUsuarioEmpresa.js';
 import { validarId } from '../Middlewares/validaId.js';

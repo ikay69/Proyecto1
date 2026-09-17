@@ -155,8 +155,10 @@ const articulosControllers = {
             }
 
             await Existencias.editarCosto({
-                pEmpId: idEmpresa, pArticuloId: idArticulo,
-                pBolsaEstado: 'DISPONIBLE', pPropietarioId: null,
+                pEmpId: idEmpresa,
+                pArticuloId: idArticulo,
+                pBolsaEstado: 'DISPONIBLE', 
+                pPropietarioId: null,
                 pCosto: Number(nuevoCosto)
             });
 

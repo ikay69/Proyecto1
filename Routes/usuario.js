@@ -2,7 +2,7 @@ import {Router} from 'express';
 import usuarioControllers from '../Controllers/usuario.js';
 import { check,body } from 'express-validator';
 import { validarRol } from '../Middlewares/validarRoles.js';
-import { validarCampo } from '../middlewares/validarCampos.js';
+import { validarCampo } from '../Middlewares/validarCampos.js';
 import { validarJWT } from '../Middlewares/validarJwt.js';
 import { userValidarNombreRut,
     userValidarNomUserRut,

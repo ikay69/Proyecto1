@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
 import authControllers from '../Controllers/auth.js';
-import { validarCampo } from '../middlewares/validarCampos.js';
+import { validarCampo } from '../Middlewares/validarCampos.js';
 
 const router = Router();
 

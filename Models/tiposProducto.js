@@ -75,8 +75,8 @@ const TiposProducto = {
     async traerActivas({pEmpId}){
         const [rows] = await pool.query(
             `SELECT
-                Id,
-                Nombre
+                Id AS tipProId,
+                Nombre AS tipProNombre
             FROM TiposProductos WHERE EmpresaId = ? 
             AND  Estado = true
             ORDER BY Nombre ASC;`,

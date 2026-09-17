@@ -180,13 +180,20 @@ const Articulos = {
                 a.Vender            AS artVender,
                 a.Estado            AS artEstado, 
                 c.Nombre            AS artCategoria,
-                tp.Nombre           AS artTipoProducto
+                tp.Nombre           AS artTipoProducto,
+                IFNULL(
+                    GROUP_CONCAT(CONCAT(pr.Nombre, ':', ap.Valor) SEPARATOR ','), 
+                    ''
+                ) AS artPropiedades
             FROM Articulos a
                 LEFT JOIN Productos p ON p.Id = a.ProductoId
                 LEFT JOIN TiposProductos tp ON tp.Id = p.TipoProductoId
                 LEFT JOIN Categorias c ON c.Id = p.CategoriaId 
+                LEFT JOIN ArticuloPropiedades ap ON ap.ArticuloId = a.Id
+                LEFT JOIN Propiedades pr ON pr.Id = ap.PropiedadId
             WHERE a.EmpresaId = ? AND a.Estado = true AND a.Vender = true
                 AND a.${pCampoOrden} LIKE ?
+            GROUP BY  a.Id, c.Nombre, tp.Nombre
             ORDER BY a.${pCampoOrden} ${pOrden}
             LIMIT 50 OFFSET ?;`,
             [pEmpId,pTexto,pOffset]

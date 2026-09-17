@@ -118,21 +118,43 @@ const productosControllers = {
             if(!existeProducto){
                 return res.status(401).json({msg:'Producto invalido'});
             }
+            
 
             const existeTipoProducto = await TiposProducto.traerPorId({pId:idTipoProducto,pEmpId:idEmpresa});
             if(!existeTipoProducto){
                 return res.status(401).json({msg:'Tipo de producto invalido'});
             }
 
+            if(existeProducto.proTipoProductoId !== idTipoProducto){
+                if(existeTipoProducto.tipProEstado !== true){
+                    return res.status(401).json({msg:'Producto inactivo'});
+                }
+            }
+           
+
             const existeCategoria = await Categorias.traerPorId({pId:idCategoria,pEmpId:idEmpresa});
             if(!existeCategoria){
                 return res.status(401).json({msg:'Categoria invalida'});
+            }
+
+            if(existeProducto.proCategoriaId !== idCategoria){
+                if(existeCategoria.catEstado !== true){
+                    return res.status(401).json({msg:'Categoria inactivo'});
+                }
             }
 
             const existeUnidadMedida = await UnidadesMedida.traerPorId({pId:idUnidadMedida,pEmpId:idEmpresa});
             if(!existeUnidadMedida){
                 return res.status(401).json({msg:'Unidad de medida invalida'});
             }
+
+            if(existeProducto.proUnidadMedidaId !== idUnidadMedida){
+                if(existeUnidadMedida.uniMedEstado !== true){
+                    return res.status(401).json({msg:'Unidad de medida inactivo'});
+                }
+            }
+
+
 
             const existeNombre = await Productos.traerPorNombre({pEmpId:idEmpresa,pNombre:vNombre});
 

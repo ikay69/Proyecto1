@@ -24,7 +24,7 @@ const movimientosControllers = {
         try {
             const {idEmpresa, idArticulo, TipoMovimiento, BolsaEstado, idPropietario, Cantidad, CostoUnitario, Observaciones} = req.body;
             const UsuIdLogin = req.usuario.Id;
-
+            
             //sin esta comprobacion un idArticulo de otra empresa llegaria al motor de
             //movimientos y moveria existencias ajenas
             const existeArticulo = await Articulos.traerPorId({pId:idArticulo, pEmpId:idEmpresa});
@@ -36,8 +36,13 @@ const movimientosControllers = {
             //quedaria atada a un Tercero ajeno (y el FK contra Terceros solo verifica el Id).
             if (idPropietario !== undefined && idPropietario !== null) {
                 const existePropietario = await Terceros.traerPorId({pId:idPropietario, pEmpId:idEmpresa});
+                
                 if (!existePropietario) {
                     return res.status(401).json({msg:'Propietario inválido'});
+                }
+
+                if(existePropietario.terEstado !==true){
+                    return res.status(401).json({msg:'Propietario inactivo'});
                 }
             }
 

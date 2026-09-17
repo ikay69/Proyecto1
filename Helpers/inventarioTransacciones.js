@@ -30,11 +30,12 @@ const registrarMovimiento = async (connection, datos) => {
         throw new Error('La cantidad del movimiento debe ser mayor a cero');
     }
 
+    
     const bolsaActual = await Existencias.traerBolsaBloqueada(connection, {
         pEmpId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId
     });
-    const cantidadActual = bolsaActual ? Number(bolsaActual.Cantidad) : 0;
-
+    const cantidadActual = bolsaActual ? Number(bolsaActual.Cantidad) : 0; //si no existe coloque cero
+    
     if (pTipoMovimiento === 'SALIDA' && cantidadActual < Number(pCantidad)) {
         throw new Error(`Existencia insuficiente en la bolsa ${pBolsaEstado} (disponible: ${cantidadActual})`);
     }

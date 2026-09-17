@@ -29,8 +29,8 @@ const validarJWT = async (req, res, next) => {
     const usuario = await Usuario.buscarPorIdJwt(uid);
     const usuarioEmpresa = await UsuariosEmpresa.validarRelacion({pEmpresaId:empresa.Id,pUsuarioId:uid})
     
-    console.log('validarjwt 28 empresa:',empresa);
-    console.log('validarjwt 28 user:',usuario);
+    //console.log('validarjwt 28 empresa:',empresa);
+    //console.log('validarjwt 28 user:',usuario);
     
     if (!usuario || !empresa || !usuarioEmpresa) {
         return res.status(401).json({ msg: 'Usuario o incorrecto con empresa' });

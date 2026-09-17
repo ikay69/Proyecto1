@@ -1,0 +1,1 @@
+import{E as n}from"./EnConstruccion-fvgdQQZP.js";import{_ as s,c as t,r as c,o as e}from"./index-CzPxYg9R.js";const r={name:"Abonos",components:{EnConstruccion:n}};function a(p,_,i,m,u,f){const o=c("EnConstruccion");return e(),t(o,{titulo:"Abonos"})}const C=s(r,[["render",a]]);export{C as default};

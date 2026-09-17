@@ -2,7 +2,7 @@ import {Router} from 'express';
 import empresaControllers from '../Controllers/empresa.js';
 import { check } from 'express-validator';
 import { validarRol } from '../Middlewares/validarRoles.js';
-import { validarCampo } from '../middlewares/validarCampos.js';
+import { validarCampo } from '../Middlewares/validarCampos.js';
 import { validarJWT } from '../Middlewares/validarJwt.js';
 
 
@@ -85,7 +85,7 @@ router.put('/updateempresa',[
 ],empresaControllers.actualizarDatos)
 
 //traer empresa por id
-router.get('/getempresaid',[
+router.post('/getempresaid',[
     validarJWT,
     validarRol('ADMINISTRADOR'),
     check('idEmpresa','campo obligatorio').not().isEmpty(),

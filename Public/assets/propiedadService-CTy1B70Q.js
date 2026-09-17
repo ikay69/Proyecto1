@@ -1,0 +1,1 @@
+import{h as e}from"./http-cWtnFTIF.js";const r={getAll(p){return e.post("/propiedad/getallpropiedad",p)},create(p){return e.post("/propiedad/newpropiedad",p)},getById(p){return e.post("/propiedad/getidpropiedad",p)},update(p){return e.put("/propiedad/updatepropiedad",p)}};export{r as p};

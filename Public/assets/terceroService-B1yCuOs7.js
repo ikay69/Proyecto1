@@ -1,0 +1,1 @@
+import{h as r}from"./http-cWtnFTIF.js";const o={getAll(e){return r.post("/tercero/getalltercero",e)},create(e){return r.post("/tercero/newtercero",e)},getById(e){return r.post("/tercero/getidtercero",e)},update(e){return r.put("/tercero/updatetercero",e)}};export{o as t};

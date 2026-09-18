@@ -55,13 +55,13 @@ const Usuario = {
     async traerTodosUsuarios({pPagina}){
         const [rows] = await pool.query(`
             SELECT 
-                u.Id AS usuario_id,
-                u.userName as usuario_user,
-                u.Nombres AS usuario_nombre,
-                u.Apellidos AS usuario_apellido,
-                u.Estado AS usuario_estado,
-                u.Rol AS usuario_rol,
-                u.FechaCreacion as usuario_fechacreacion
+                u.Id            AS usuid,
+                u.userName      as usuUsuario,
+                u.Nombres       AS usuNombres,
+                u.Apellidos     AS usuApellidos,
+                u.Estado        AS usuEstado,
+                u.Rol           AS usuRol,
+                u.FechaCreacion as usuFecCreacion
             FROM Usuarios u
             ORDER BY u.FechaCreacion ASC
             LIMIT 50 OFFSET ?;`,
@@ -79,17 +79,18 @@ const Usuario = {
         return rows.changedRows;
     },
 
-    async actualizar({pNombres,pApellidos,pUserName,pRol,pId}){
+    async actualizar({pNombres,pApellidos,pUserName,pRol,pId,pEstado}){
        // console.log('modelo usuario actualizar 83 nombre ',pNombres, ' ape ',pApellidos, ' user ',pUserName,' rol' ,pRol, ' id ', pId )
         const [rows] = await pool.query(
             `UPDATE Usuarios SET
                 Nombres = ?,
                 Apellidos = ?,
                 userName = ?,
-                Rol = ?
+                Rol = ?,
+                Estado = ?
             WHERE Id = ?
             `,
-        [pNombres,pApellidos,pUserName,pRol,pId])
+        [pNombres,pApellidos,pUserName,pRol,pEstado,pId])
 
         return rows.affectedRows;
     },

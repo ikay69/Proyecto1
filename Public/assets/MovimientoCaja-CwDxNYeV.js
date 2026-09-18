@@ -1,0 +1,1 @@
+import{E as n}from"./EnConstruccion-BTUMy_3v.js";import{_ as t,c,r as e,o as s}from"./index-CpdHkI8C.js";const a={name:"MovimientoCaja",components:{EnConstruccion:n}};function r(i,m,p,_,u,f){const o=e("EnConstruccion");return s(),c(o,{titulo:"Movimiento en caja"})}const d=t(a,[["render",r]]);export{d as default};

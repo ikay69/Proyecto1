@@ -1,10 +1,6 @@
 import bcryptjs from 'bcryptjs';
 import Usuario from "../Models/usuario.js";
 import UsuariosEmpresa from '../Models/usuariosEmpesa.js';
-import {
-    userValidarPass,
-    userValidarNombre
-} from '../Helpers/usuario.js';
 
 
 const usuarioControllers = {
@@ -22,44 +18,26 @@ const usuarioControllers = {
             var pPassword = String(password);
             var pRol = String(rol);
             var pEmpId = req.empresa.Id
+            var usuLog = req.usuario.Id
 
             pNombres = pNombres.toUpperCase().trim();
             pApellidos = pApellidos.toUpperCase().trim();
             pUserName = pUserName.toUpperCase().trim();
             pPassword = pPassword.trim();
             pRol = pRol.toUpperCase().trim();
-           
 
-            if(pPassword.length === 0 || !pPassword || pPassword === undefined){
-                res.status(401).json({ msg: 'Error en contraseña'});
-            }
-            
-            if(pPassword.length > 11){
-                res.status(401).json({ msg: 'Error en contraseña max 10 caracteres'});
+
+            const usuarioEmpresa = await UsuariosEmpresa.validarRelacion({pEmpresaId:pEmpId,pUsuarioId:usuLog});
+
+            if(!usuarioEmpresa){
+                return res.status(400).json({msg:"No existe relacion entre usuario y empresa"})
             }
 
-            if(pUserName.length > 51){
-                return res.status(401).json({msg:"Nombre de usuario supero 50 caracteres"})
-            }
-
-            if(pRol !== 'ADMINISTRADOR' && pRol !== 'VENDEDOR'){
-                res.status(401).json({ msg: 'Error en usuario'});
-            }
-
-            if(pNombres.length > 151 || pApellidos.length > 151){
-                res.status(401).json({ msg: 'Nombre y apellido invalido (max 150)'});
-            }
-            
-            if(pNombres.length === 0 || !pNombres || pNombres === undefined){
-                res.status(401).json({ msg: 'Nombre obligatorio'});
-            }
-
-            if(pApellidos.length === 0 || !pApellidos || pApellidos === undefined){
-                res.status(401).json({ msg: 'Nombre obligatorio'});
+            if(!usuarioEmpresa.Estado){
+                return res.status(400).json({msg:"No existe relacion activa entre usuario y empresa"})
             }
 
             const usuarioExiste = await Usuario.buscarPorUsername(pUserName);
-            //console.log('control usuario crear 54 ',usuarioExiste);
             if (usuarioExiste) {
                 return res.status(401).json({mag:'Usuario, ya existe'} );
             }
@@ -73,7 +51,7 @@ const usuarioControllers = {
 
             if(usuario>0){
 
-                const usuariosempresa = await UsuariosEmpresa.crear({pEmpresaId:pEmpId,pUsuarioId:usuario})
+                const crearRelacionUsuEmp = await UsuariosEmpresa.crear({pEmpresaId:pEmpId,pUsuarioId:usuario})
 
                 let mensaje = 'Usuario creado';
                 return res.status(200).json({ msg: mensaje});
@@ -102,20 +80,24 @@ const usuarioControllers = {
 
             const maxPagina = Math.ceil(cantUsuarios/50);
             if (vpagina>maxPagina){
-                vpagina = maxPagina
+                vpagina = maxPagina;
+            }
+
+            if (vpagina<0){
+                vpagina = 1;
             }
           
             const offset = (vpagina - 1) * 50;
            
             const usuario  = await  Usuario.traerTodosUsuarios({pPagina:offset});
        
-            return res.status(200).json({data:usuario,cantData:cantUsuarios});
+            return res.status(200).json({cantData:cantUsuarios,data:usuario});
         } catch (error) {
             return res.status(500).json({msg:error.message || 'Error interno del servidor'})
         }
     },
 
-    //cambiar password usuario falta
+    //cambiar password usuario 
     cambiarPass :async (req,res)=>{
         try {
 
@@ -124,6 +106,7 @@ const usuarioControllers = {
        
             var vPass = String(pass)
             var vpassNew = String(passNew)
+
             var usuarioLogin = req.usuario.Id;
             var usuarioRolLogin  = req.usuario.Rol;
             var empresaIdLogin = req.empresa.Id;
@@ -131,9 +114,6 @@ const usuarioControllers = {
             vPass = vPass.trim();
             vpassNew = vpassNew.trim();
 
-            if(!Number.isInteger(idUsuario) == true){
-                return res.status(401).json({msg:'Usuario invalida'});
-            }
 
             const usuarioEmpresa = await UsuariosEmpresa.validarRelacion({pEmpresaId:empresaIdLogin,pUsuarioId:idUsuario});
             
@@ -145,17 +125,7 @@ const usuarioControllers = {
                 return res.status(400).json({msg:"No existe relacion activa entre usuario y empresa"})
             }
 
-            
 
-            var valido = await userValidarPass(vPass);
-            if(valido !== true){
-                return res.status(401).json({msg:valido});
-            }
-
-            valido = await userValidarPass(vpassNew);
-            if(valido !== true){
-                return res.status(401).json({msg:valido});
-            }
             
             const usuarioCambiarPass = await Usuario.buscarPorId(idUsuario);
             if(!usuarioCambiarPass){
@@ -192,7 +162,7 @@ const usuarioControllers = {
     //actualizar datos usuario falta
     actualizar:async (req,res)=>{
         try {
-            const {idUsuario,nombres,apellidos,user,rol} = req.body;
+            const {idEmpresa,idUsuario,nombres,apellidos,user,rol,estado} = req.body;
 
             if(!Number.isInteger(idUsuario) == true){
                 return res.status(401).json({msg:'Usuario invalida'});
@@ -204,50 +174,50 @@ const usuarioControllers = {
             var pApellidos = String(apellidos);
             var pUserName = String(user);
             var pRol = String(rol);
-            
+            var vEstado = true
 
             pNombres = pNombres.toUpperCase().trim();
             pApellidos = pApellidos.toUpperCase().trim();
             pUserName = pUserName.toUpperCase().trim();
             pRol = pRol.toUpperCase().trim();
 
+            if(estado !== true){
+                vEstado = false;
+            }else{
+                vEstado = true;
+            }
 
             const usuarioCambiarDatos = await Usuario.buscarPorId(idUsuario);
             if(!usuarioCambiarDatos){
                 return res.status(401).json({msg:'usuario invalido'});
             }
 
-            const usuarioEmpresa = await UsuariosEmpresa.validarRelacion({pEmpresaId:empresaIdLogin,pUsuarioId:idUsuario});
-            if(!usuarioEmpresa){
+
+            const relacionUsuEmpDeUsuEditar = await UsuariosEmpresa.validarRelacion({pEmpresaId:idEmpresa,pUsuarioId:idUsuario});
+
+            if(!relacionUsuEmpDeUsuEditar){
                 return res.status(400).json({msg:"No existe relacion entre usuario y empresa"})
             }
 
-            if(!usuarioEmpresa.Estado){
-                return res.status(400).json({msg:"No existe relacion activa entre usuario y empresa"})
-            }
-
-            var valido = await userValidarNombre(pNombres);
-            if(!valido){
-                return res.status(401).json({msg:valido});
-            }
-
-            valido = await userValidarNombre(pApellidos);
-            if(!valido){
-                return res.status(401).json({msg:valido});
-            }
-
-            if(pRol !=='ADMINISTRADOR' && pRol !== 'VENDEDOR'){
-                return res.status(401).json({msg:'Rol invalido'})
-            }
-
+            //validar que no este el userName en otor usuario
             const usuarioActualizar = await Usuario.buscarPorUsername(pUserName);
             if(usuarioActualizar){
                 if(usuarioActualizar.Id !== idUsuario){
                     return res.status(400).json({msg:'Nombre de usuario ya existe'})
                 }
             }
+            
+            // si es un administr
+            if(usuarioCambiarDatos.Rol == 'ADMINISTRADOR' && vEstado !== true){
 
-            const actualizar = await Usuario.actualizar({pNombres,pApellidos,pUserName,pRol,pId:idUsuario});
+                const validarCantAdmin =  await UsuariosEmpresa.cantUsuariosAdminActivos({pEmpresa:idEmpresa});
+                
+                if(validarCantAdmin < 2){
+                    return res.status(401).json({msg:'operacon invalida empresa sin suficientes usuarios'})
+                }
+            }
+
+            const actualizar = await Usuario.actualizar({pNombres,pApellidos,pUserName,pRol,pId:idUsuario,pEstado:vEstado});
 
             return res.status(201).json({msg:'Datos actualizados'})
         } catch (error) {
@@ -257,14 +227,45 @@ const usuarioControllers = {
     },
 
 
+    ListarPorId:async(req,res)=>{
+        try {
+            const {idUsuario} = req.body;
+
+            const usuario = await Usuario.buscarPorId(idUsuario);
+
+            if(!usuario){
+                return res.status(400).json({msg:"Usuario invalido"})    
+            }
+
+            const empresas = await UsuariosEmpresa.empresasDeUsuario({pUsuarioId:idUsuario})
+
+            const usuarioId = {
+                usuId : usuario.Id,
+                usuUsuario : usuario.userName,
+                usuNombre: usuario.Nombres,
+                usuApellido: usuario.Apellidos,
+                usuEstado : usuario.Estado,
+                usuRol: usuario.Rol,
+                usuFecCreacion: usuario.FechaCreacion
+            }
+
+            
+            return res.status(200).json({data:{usuarioId,empresas}})
+        } catch (error) {
+            let mensaje = 'Error en la operación' + String(error);
+            res.status(500).json({ msg: mensaje});
+        }
+        
+    },
+
+
+
     //------------------------------------------------------
     
     //cambiar estado falta
     cambiarEstado:async (req,res)=>{
         try {
 
-             
-            
             const {id,estado,passEmp} = req.body;
 
             var passEmp1 = String(passEmp);
@@ -392,7 +393,7 @@ const usuarioControllers = {
             let mensaje = 'Error en la operación' + String(error);
             res.status(401).json({ msg: mensaje});
         }
-    }
+    },
 
     
 }

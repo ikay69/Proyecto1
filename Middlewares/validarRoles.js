@@ -8,7 +8,7 @@ const validarRol = (...roles) =>{
                 
                 return res.status(401).json({
                     //msg: `El servicio requiere uno de los siguientes roles: [${roles.join(', ')}]. Tu rol actual no está autorizado.`
-                    msg: `Actual no está autorizado.`
+                    msg: `Usuario actual no está autorizado.`
                 });
             }
             next();

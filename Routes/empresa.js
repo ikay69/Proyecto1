@@ -4,6 +4,7 @@ import { check } from 'express-validator';
 import { validarRol } from '../Middlewares/validarRoles.js';
 import { validarCampo } from '../Middlewares/validarCampos.js';
 import { validarJWT } from '../Middlewares/validarJwt.js';
+import { validarId } from '../Middlewares/validaId.js';
 
 
 import { EmpvalidarPassRut,
@@ -57,6 +58,7 @@ router.put('/cambiarclaveempresa',[
     check('newClave','campo obligatorio').not().isEmpty(),
     check('passEmpresa').custom(EmpvalidarPassRut),
     check('newClave').custom(EmpvalidarClaveRut),
+    check('idEmpresa').custom(validarId),
     validarCampo
 ],empresaControllers.cambiarClave)
 

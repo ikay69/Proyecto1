@@ -71,6 +71,22 @@ const UsuariosEmpresa = {
         );
 
         return rows;
+    },
+
+    async cantUsuariosAdminActivos({pEmpresa}){
+        const [total] =  await pool.query(
+
+            `SELECT COUNT(*) AS total
+            FROM UsuariosEmpresa ue
+            INNER JOIN Usuarios u ON ue.UsuarioId = u.Id
+            WHERE ue.EmpresaId = ?
+            AND ue.Estado = TRUE
+            AND u.Estado = TRUE
+            AND u.Rol = 'ADMINISTRADOR';`,
+            [pEmpresa]
+        );
+
+        return total[0].total ;
     }
 }
 

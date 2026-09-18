@@ -4,11 +4,14 @@ import { check,body } from 'express-validator';
 import { validarRol } from '../Middlewares/validarRoles.js';
 import { validarCampo } from '../Middlewares/validarCampos.js';
 import { validarJWT } from '../Middlewares/validarJwt.js';
-import { userValidarNombreRut,
-    userValidarNomUserRut,
-    userValidarPassRut,
-    userValidarRolRut
+import { 
+    usuValidarCrear,
+    usuValidarPassRut,
+    usuValidarEditar
 } from '../Helpers/usuario.js'
+
+import { validarId } from '../Middlewares/validaId.js';
+import { validarUsuarioEmpresa } from '../Middlewares/validarUsuarioEmpresa.js';
 
 const router = Router();
 
@@ -21,11 +24,7 @@ router.post('/newusuer',[
     check('user','Usuario campo obligatorio').not().isEmpty(),
     check('password','Contraseña campo obligatorio').not().isEmpty(),
     check('rol','Rol campo obligatorio').not().isEmpty(),
-    check('nombres').custom(userValidarNombreRut),
-    check('apellidos').custom(userValidarNombreRut),
-    check('user').custom(userValidarNomUserRut),
-    check('password').custom(userValidarPassRut),
-    check('rol').custom(userValidarRolRut),
+    usuValidarCrear,
     validarCampo
 ],usuarioControllers.crear);
 
@@ -38,15 +37,29 @@ router.post('/getuserall',[
     validarCampo
 ],usuarioControllers.listarTodosUsuarios);
 
+
+
+router.post('/getidusuario',[
+  validarJWT,  
+  validarRol('ADMINISTRADOR','VENDEDOR'),
+  check('idEmpresa','Empresa campo obligatorio').not().isEmpty(),
+  check('idUsuario','Empresa campo obligatorio').not().isEmpty(),
+  check('idEmpresa').custom(validarId),
+  check('idUsuario').custom(validarId),
+  validarUsuarioEmpresa,
+  validarCampo
+],usuarioControllers.ListarPorId);
+
+
 //cambiar password usuario 
 router.put('/changepassuser',[
     validarJWT,
+    check('idUsuario').custom(validarId),
     check('pass','campo obligatorio').not().isEmpty(),
     check('passNew','campo obligatorio').not().isEmpty(),
     check('idUsuario','campo obligatorio').not().isEmpty(),
-    check('pass').custom(userValidarPassRut),
-    check('passNew').custom(userValidarPassRut),
     validarRol('VENDEDOR','ADMINISTRADOR'),
+    usuValidarPassRut,
     validarCampo
 ],usuarioControllers.cambiarPass);
 
@@ -55,49 +68,24 @@ router.put('/changepassuser',[
 router.put('/updateuser',[
     validarJWT,
     validarRol('ADMINISTRADOR'),
+    check('idEmpresa','campo obligatorio').not().isEmpty(),
     check('idUsuario','campo obligatorio').not().isEmpty(),
     check('nombres','Nombres campo obligatorio').not().isEmpty(),
     check('apellidos','Apellidos campo obligatorio').not().isEmpty(),
     check('user','Usuario campo obligatorio').not().isEmpty(),
     check('rol','Rol campo obligatorio').not().isEmpty(),
-    check('nombres').custom(userValidarNombreRut),
-    check('apellidos').custom(userValidarNombreRut),
-    check('rol').custom(userValidarRolRut),
+    check('estado','estado campo obligatorio').not().isEmpty(),
+    check('idEmpresa').custom(validarId),
+    check('idUsuario').custom(validarId),
+    validarUsuarioEmpresa,
+    usuValidarEditar,
     validarCampo
 ],usuarioControllers.actualizar);
 
-router.put('/changestatususer',[
-    validarJWT,
-    validarRol('ADMINISTRADOR'),
-    validarCampo
-],usuarioControllers.cambiarEstado);
 
 
 
 //----------------------------------------
-
-
-
-
-
-//eliminar usuario falta 
-router.delete('/deleteuser',[
-    validarJWT,
-    check('userid','campo obligatorio').not().isEmpty(),
-    check('passEmp','campo obligatorio').not().isEmpty(),
-    validarRol('ADMINISTRADOR'),
-    validarCampo
-],(req,res)=>{res.status(200).json({msg:'trabajando en ello'})});
-//],usuarioControllers.Eliminar);
-
-//listar usuarios mmmmm
-router.get('/getusersemp',[
-    validarJWT,
-    validarRol('ADMINISTRADOR'),
-    check('orden','campo obligatorio').not().isEmpty(),
-    validarCampo
-],(req,res)=>{res.status(200).json({msg:'trabajando en ello'})});
-//],usuarioControllers.ListarPorEmpresa);
 
 
 export default router;

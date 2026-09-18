@@ -1,0 +1,1 @@
+import{h as a}from"./http-76726-3P.js";const r={getAll(t){return a.post("/categoria/getallcategoria",t)},create(t){return a.post("/categoria/newcategoria",t)},getById(t){return a.post("/categoria/getidcategoria",t)},update(t){return a.put("/categoria/updatecategoria",t)},getActivas(t){return a.post("/categoria/getactivascategoria",t)}};export{r as c};

@@ -51,10 +51,15 @@ const authControllers = {
 
             const empresas = await UsuariosEmpresa.empresasDeUsuario({pUsuarioId:usuario.Id})
 
+            const nuevoArray = empresas.map(({ empId, empNombre }) => ({
+                Id: empId,
+                Nombre: empNombre
+            }));
+
             return res.json(    {
                 "token": token,
                 "usuario": usuario.Nombres,
-                "empresas": empresas,
+                "empresas": nuevoArray,
                 "rol": usuario.Rol
             })
             

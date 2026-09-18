@@ -42,7 +42,9 @@ const UsuariosEmpresa = {
 
     async empresasDeUsuario({pUsuarioId}){
         const [rows] = await pool.query(
-            `SELECT Id,Nombre
+            `SELECT 
+            Id          AS empId,
+            Nombre      AS empNombre
             FROM Empresas e
             INNER JOIN UsuariosEmpresa ue ON e.Id = ue.EmpresaId
             WHERE ue.UsuarioId = ?`,

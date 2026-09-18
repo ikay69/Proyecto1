@@ -36,6 +36,6 @@ router.post('/getusuariosconmiempresa',[
     check('idEmpresa').custom(validarId),
     validarUsuarioEmpresa,
     validarCampo
-],usuariosEmpresaControllers.usuariosSinMiEmpresa);
+],usuariosEmpresaControllers.usuariosConMiEmpresa);
 
 export default router;

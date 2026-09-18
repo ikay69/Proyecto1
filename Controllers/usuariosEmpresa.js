@@ -74,7 +74,7 @@ const usuariosEmpresaControllers = {
         }
     },
 
-    usuariosSinMiEmpresa:async(req,res)=>{
+    usuariosConMiEmpresa:async(req,res)=>{
         try {
             const {idEmpresa} = req.body; 
             

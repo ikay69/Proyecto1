@@ -173,10 +173,13 @@ const Articulos = {
     },
 
     //la "ventanilla" de venta: solo articulos que se pueden vender y que tienen algo
-    //disponible para vender. El join con Existencias nunca duplica filas porque
-    //uq_existencias_bolsa (EmpresaId, ArticuloId, BolsaEstado, PropietarioIdClave) garantiza
-    //una sola fila DISPONIBLE sin propietario por articulo dentro de la misma empresa; por eso
-    //el join tambien amarra e.EmpresaId = a.EmpresaId, que es la primera columna de esa unique.
+    //disponible para vender. pBodegaId es opcional (cadena vacia = todas las bodegas): sin
+    //filtro devuelve una fila por cada combinacion articulo+bodega con existencia, para poder
+    //elegir de cual bodega sale cada renglon de la venta (una venta puede mezclar bodegas por
+    //linea). El join con Existencias nunca duplica mas filas de las necesarias porque
+    //uq_existencias_bolsa (EmpresaId, BodegaId, ArticuloId, BolsaEstado, PropietarioIdClave)
+    //garantiza una sola fila DISPONIBLE sin propietario por articulo+bodega; por eso el join
+    //tambien amarra e.EmpresaId = a.EmpresaId, que es la primera columna de esa unique.
     async traerVendibles({pEmpId,pBodegaId,pCampoOrden,pOrden,pOffset,pTexto}){
         const [rows] = await pool.query(
             `SELECT
@@ -184,15 +187,19 @@ const Articulos = {
                 a.Nombre AS artNombre,
                 a.CodigoSKU AS artSKU,
                 a.PrecioVentaUnitario AS artPrecio,
+                e.BodegaId AS artBodegaId,
+                bo.Nombre AS artBodegaNombre,
                 e.Cantidad AS artCantidadDisponible
             FROM Articulos a
                 INNER JOIN Existencias e ON e.ArticuloId = a.Id AND e.EmpresaId = a.EmpresaId
-                    AND e.BodegaId = ? AND e.BolsaEstado = 'DISPONIBLE' AND e.PropietarioId IS NULL AND e.Cantidad > 0
+                    AND (? = '' OR e.BodegaId = ?)
+                    AND e.BolsaEstado = 'DISPONIBLE' AND e.PropietarioId IS NULL AND e.Cantidad > 0
+                INNER JOIN Bodegas bo ON bo.Id = e.BodegaId
             WHERE a.EmpresaId = ? AND a.Estado = true AND a.Vender = true
                 AND a.${pCampoOrden} LIKE ?
-            ORDER BY a.${pCampoOrden} ${pOrden}
+            ORDER BY a.${pCampoOrden} ${pOrden}, e.BodegaId ASC
             LIMIT 50 OFFSET ?;`,
-            [pBodegaId,pEmpId,pTexto,pOffset]
+            [pBodegaId,pBodegaId,pEmpId,pTexto,pOffset]
         );
         return rows || [];
     },
@@ -202,9 +209,10 @@ const Articulos = {
             `SELECT COUNT(*) AS total
             FROM Articulos a
                 INNER JOIN Existencias e ON e.ArticuloId = a.Id AND e.EmpresaId = a.EmpresaId
-                    AND e.BodegaId = ? AND e.BolsaEstado = 'DISPONIBLE' AND e.PropietarioId IS NULL AND e.Cantidad > 0
+                    AND (? = '' OR e.BodegaId = ?)
+                    AND e.BolsaEstado = 'DISPONIBLE' AND e.PropietarioId IS NULL AND e.Cantidad > 0
             WHERE a.EmpresaId = ? AND a.Estado = true AND a.Vender = true AND a.${pCampoOrden} LIKE ?;`,
-            [pBodegaId,pEmpId,pTexto]
+            [pBodegaId,pBodegaId,pEmpId,pTexto]
         );
         return rows[0].total;
     },

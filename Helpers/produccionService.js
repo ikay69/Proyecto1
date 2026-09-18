@@ -10,7 +10,7 @@ import { calcularCostoProduccion, calcularCostoUnitarioProducido } from './coste
 //tambien nace dentro de la transaccion, asi que si cualquier movimiento falla no queda ni la
 //orden ni rastro en Existencias/Movimientos. La trazabilidad posterior es por
 //Movimientos.traerPorOrigen({pTipoOrigen:'PRODUCCION', pOrigenId: ordenId}).
-const crearOrdenProduccion = async ({ pEmpId, pUsuId, pBodegaId, pObservaciones, consumos, producidos }) => {
+const crearOrdenProduccion = async ({ pEmpId, pUsuId, pObservaciones, consumos, producidos }) => {
     if (!Array.isArray(consumos) || consumos.length === 0) {
         throw new Error('La orden debe tener al menos un consumo');
     }
@@ -32,15 +32,16 @@ const crearOrdenProduccion = async ({ pEmpId, pUsuId, pBodegaId, pObservaciones,
             }
 
             //el costo de lo consumido NO lo decide el llamador: es el costo promedio vigente de la
-            //bolsa DISPONIBLE del articulo (el costo vive en Existencias, no en Articulos), leido
-            //con FOR UPDATE dentro de esta misma transaccion.
+            //bolsa DISPONIBLE del articulo EN LA BODEGA de ese consumo (el costo vive en
+            //Existencias por bodega, no en Articulos), leido con FOR UPDATE dentro de esta misma
+            //transaccion.
             const bolsaDisponible = await Existencias.traerBolsaBloqueada(connection, {
-                pEmpId, pBodegaId, pArticuloId: consumo.idArticulo, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+                pEmpId, pBodegaId: consumo.idBodega, pArticuloId: consumo.idArticulo, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
             });
             const costoUnitarioConsumo = bolsaDisponible ? bolsaDisponible.CostoUnitario : null;
 
             await registrarMovimiento(connection, {
-                pEmpId, pUsuId, pBodegaId,
+                pEmpId, pUsuId, pBodegaId: consumo.idBodega,
                 pArticuloId: consumo.idArticulo,
                 pTipoMovimiento: 'SALIDA',
                 pBolsaEstado: consumo.BolsaEstado,
@@ -67,7 +68,7 @@ const crearOrdenProduccion = async ({ pEmpId, pUsuId, pBodegaId, pObservaciones,
                 : calcularCostoUnitarioProducido({ costoTotalConsumos, cantidadProducida: cantidadTotalProducida });
 
             await registrarMovimiento(connection, {
-                pEmpId, pUsuId, pBodegaId,
+                pEmpId, pUsuId, pBodegaId: producido.idBodega,
                 pArticuloId: producido.idArticulo,
                 pTipoMovimiento: 'ENTRADA',
                 pBolsaEstado: 'DISPONIBLE',

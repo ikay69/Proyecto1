@@ -20,6 +20,16 @@ const crearArticuloYTerceroDePrueba = async (connection, empId = 1) => {
     return { articuloId: insertArt.insertId, usuarioId: usuarioRows[0].Id, terceroId: terceroRows[0].Id };
 };
 
+// Bodegas.Nombre tiene UNIQUE (EmpresaId, Nombre): cada bodega de prueba usa un nombre unico.
+const crearBodegaDePrueba = async (connection, usuarioId, empId = 1) => {
+    const nombre = `BODEGA PRUEBA ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const [insertResult] = await connection.query(
+        `INSERT INTO Bodegas(EmpresaId, UsuarioIdCreador, Nombre) VALUES (?, ?, ?);`,
+        [empId, usuarioId, nombre]
+    );
+    return insertResult.insertId;
+};
+
 test('Ventas.crear inserta la cabecera y traerPorId la devuelve', async () => {
     await withRollback(async (connection) => {
         const { usuarioId, terceroId } = await crearArticuloYTerceroDePrueba(connection);
@@ -51,6 +61,7 @@ test('Ventas.crear inserta la cabecera y traerPorId la devuelve', async () => {
 test('VentaDetalles.crearVarias inserta una fila por linea y traerPorVenta las devuelve', async () => {
     await withRollback(async (connection) => {
         const { articuloId, usuarioId, terceroId } = await crearArticuloYTerceroDePrueba(connection);
+        const bodegaId = await crearBodegaDePrueba(connection, usuarioId);
 
         const ventaId = await Ventas.crear(connection, {
             pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
@@ -61,7 +72,7 @@ test('VentaDetalles.crearVarias inserta una fila por linea y traerPorVenta las d
 
         await VentaDetalles.crearVarias(connection, {
             pEmpId:1, pVentaId:ventaId,
-            lineas:[{ArticuloId:articuloId, ArticuloNombre:'ARTICULO DE PRUEBA VENTA', Cantidad:2, PrecioVentaUnidad:1000}]
+            lineas:[{ArticuloId:articuloId, BodegaId:bodegaId, ArticuloNombre:'ARTICULO DE PRUEBA VENTA', Cantidad:2, PrecioVentaUnidad:1000}]
         });
 
         const lineas = await VentaDetalles.traerPorVenta({pEmpId:1, pVentaId:ventaId}, connection);
@@ -71,5 +82,6 @@ test('VentaDetalles.crearVarias inserta una fila por linea y traerPorVenta las d
         assert.equal(Number(lineas[0].detPrecioVentaUnidad), 1000);
         assert.equal(Number(lineas[0].detArticuloId), Number(articuloId));
         assert.equal(lineas[0].detArticuloNombre, 'ARTICULO DE PRUEBA VENTA');
+        assert.equal(lineas[0].detBodegaId, bodegaId);
     });
 });

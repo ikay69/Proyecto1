@@ -2,10 +2,10 @@ import Terceros from '../Models/terceros.js';
 import TiposDocumento from '../Models/tiposDocumento.js';
 import Articulos from '../Models/articulos.js';
 import Existencias from '../Models/existencias.js';
+import Bodegas from '../Models/bodegas.js';
 import Ventas from '../Models/ventas.js';
 import VentaDetalles from '../Models/ventaDetalles.js';
 import { crearVentaContado } from '../Helpers/ventaService.js';
-import { BODEGA_PREDETERMINADA } from '../Helpers/bodegaPredeterminada.js';
 
 const ventasControllers = {
     crear: async (req,res) => {
@@ -33,9 +33,12 @@ const ventasControllers = {
             }
 
             //cada idArticulo se valida y se resuelve su Nombre AQUI, antes de la transaccion:
-            //el snapshot de VentaDetalles nunca usa un nombre que mande el cliente. De la bolsa
-            //DISPONIBLE en Existencias sale CostoUnitario (el costo ya no vive en Articulos), que
-            //el servicio guarda en el kardex como rastro de auditoria: leerlo aqui evita que el
+            //el snapshot de VentaDetalles nunca usa un nombre que mande el cliente. Cada linea
+            //trae su propia idBodega (un mismo articulo puede venderse en parte desde una bodega
+            //y en parte desde otra dentro de la misma venta), validada contra la empresa del
+            //token igual que idArticulo/idTercero. De la bolsa DISPONIBLE de ESA bodega en
+            //Existencias sale CostoUnitario (el costo vive por bodega, no en Articulos), que el
+            //servicio guarda en el kardex como rastro de auditoria: leerlo aqui evita que el
             //servicio vuelva a consultar cada articulo (2N consultas en vez de N) y cierra la
             //ventana TOCTOU entre ambas lecturas.
             const articulosResueltos = [];
@@ -44,12 +47,19 @@ const ventasControllers = {
                 if (!articulo || !articulo.artEstado || !articulo.artVender) {
                     return res.status(401).json({msg:`Articulo ${item.idArticulo} no disponible para la venta`});
                 }
+
+                const bodega = await Bodegas.traerPorId({pId:item.idBodega, pEmpId:idEmpresa});
+                if (!bodega || !bodega.bodEstado) {
+                    return res.status(401).json({msg:`Bodega ${item.idBodega} inválida`});
+                }
+
                 const bolsaDisponible = await Existencias.traerBolsa({
-                    pEmpId:idEmpresa, pBodegaId:BODEGA_PREDETERMINADA, pArticuloId:item.idArticulo,
+                    pEmpId:idEmpresa, pBodegaId:item.idBodega, pArticuloId:item.idArticulo,
                     pBolsaEstado:'DISPONIBLE', pPropietarioId:null
                 });
                 articulosResueltos.push({
                     idArticulo: item.idArticulo,
+                    idBodega: item.idBodega,
                     ArticuloNombre: articulo.artNombre,
                     Cantidad: item.Cantidad,
                     PrecioVentaUnidad: item.PrecioVentaUnidad,
@@ -65,7 +75,7 @@ const ventasControllers = {
             const terceroNombreCompleto = [tercero.Nombre, tercero.Apellidos].filter(Boolean).join(' ').trim().slice(0, 300);
 
             const ventaId = await crearVentaContado({
-                pEmpId: idEmpresa, pUsuId: UsuIdLogin, pBodegaId: BODEGA_PREDETERMINADA, pTerceroId: idTercero,
+                pEmpId: idEmpresa, pUsuId: UsuIdLogin, pTerceroId: idTercero,
                 pTerceroTipoDoc: tipoDocAbreviatura,
                 pTerceroNumeroDoc: tercero.NumeroDocumento,
                 pTerceroNombre: terceroNombreCompleto,

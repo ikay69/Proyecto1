@@ -2,8 +2,8 @@ import Articulos from '../Models/articulos.js';
 import OrdenesProduccion from '../Models/ordenesProduccion.js';
 import Movimientos from '../Models/movimientos.js';
 import Terceros from '../Models/terceros.js';
+import Bodegas from '../Models/bodegas.js';
 import { crearOrdenProduccion } from '../Helpers/produccionService.js';
-import { BODEGA_PREDETERMINADA } from '../Helpers/bodegaPredeterminada.js';
 
 const ordenesProduccionControllers = {
     crear: async (req,res) => {
@@ -20,11 +20,21 @@ const ordenesProduccionControllers = {
                 if (!existeArticulo) {
                     return res.status(401).json({msg:`Articulo ${producido.idArticulo} inválido`});
                 }
+                const existeBodega = await Bodegas.traerPorId({pId:producido.idBodega, pEmpId:idEmpresa});
+                if (!existeBodega || !existeBodega.bodEstado) {
+                    return res.status(401).json({msg:`Bodega ${producido.idBodega} inválida`});
+                }
             }
 
-            //el propietario de cada bolsa consumida tampoco lo valida crearOrdenProduccion:
-            //sin esta comprobacion se descontaria la bolsa de un Tercero de otra empresa.
+            //la bodega de cada consumo tampoco la valida crearOrdenProduccion: sin esta
+            //comprobacion se descontaria/costearia una bolsa de una bodega de otra empresa. El
+            //propietario de cada bolsa consumida tampoco lo valida crearOrdenProduccion: sin esta
+            //comprobacion se descontaria la bolsa de un Tercero de otra empresa.
             for (const consumo of consumos) {
+                const existeBodega = await Bodegas.traerPorId({pId:consumo.idBodega, pEmpId:idEmpresa});
+                if (!existeBodega || !existeBodega.bodEstado) {
+                    return res.status(401).json({msg:`Bodega ${consumo.idBodega} inválida`});
+                }
                 if (consumo.idPropietario === undefined || consumo.idPropietario === null) continue;
                 const existePropietario = await Terceros.traerPorId({pId:consumo.idPropietario, pEmpId:idEmpresa});
                 if (!existePropietario) {
@@ -33,7 +43,7 @@ const ordenesProduccionControllers = {
             }
 
             const ordenId = await crearOrdenProduccion({
-                pEmpId: idEmpresa, pUsuId: UsuIdLogin, pBodegaId: BODEGA_PREDETERMINADA,
+                pEmpId: idEmpresa, pUsuId: UsuIdLogin,
                 pObservaciones: Observaciones ?? null, consumos, producidos
             });
 

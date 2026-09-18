@@ -68,8 +68,11 @@ const articuloValidaFiltros = async (req,res,next) => {
 };
 
 const articuloValidaCosto = async (req,res,next) => {
-    const {nuevoCosto} = req.body;
+    const {idBodega, nuevoCosto} = req.body;
 
+    if (!Number.isInteger(idBodega)) {
+        return res.status(401).json({msg:'Bodega inválida'});
+    }
     if (nuevoCosto === undefined || nuevoCosto === null || isNaN(Number(nuevoCosto)) || Number(nuevoCosto) <= 0) {
         return res.status(401).json({msg:'El nuevo costo debe ser un número mayor a cero'});
     }

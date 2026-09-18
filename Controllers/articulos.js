@@ -3,7 +3,7 @@ import ArticuloPropiedades from '../Models/articuloPropiedades.js';
 import Productos from '../Models/productos.js';
 import Propiedades from '../Models/propiedades.js';
 import Existencias from '../Models/existencias.js';
-import { BODEGA_PREDETERMINADA } from '../Helpers/bodegaPredeterminada.js';
+import Bodegas from '../Models/bodegas.js';
 
 //el nombre de columna nunca sale del body: se traduce aqui a un valor fijo, porque los
 //Models lo interpolan directamente en el ORDER BY / LIKE
@@ -141,13 +141,17 @@ const articulosControllers = {
     },
 
     //el costo unitario ya no vive en Articulos: este ajuste manual escribe (o crea, si aun no
-    //existia) la bolsa DISPONIBLE/sin propietario en Existencias, sin tocar su Cantidad.
+    //existia) la bolsa DISPONIBLE/sin propietario de la bodega indicada en Existencias, sin
+    //tocar su Cantidad.
     editarCosto: async (req,res) => {
         try {
-            const {idEmpresa, idArticulo, nuevoCosto} = req.body;
+            const {idEmpresa, idBodega, idArticulo, nuevoCosto} = req.body;
 
             if (!Number.isInteger(idArticulo)) {
                 return res.status(401).json({msg:'Articulo inválido'});
+            }
+            if (!Number.isInteger(idBodega)) {
+                return res.status(401).json({msg:'Bodega inválida'});
             }
 
             const existeArticulo = await Articulos.traerPorId({pId:idArticulo,pEmpId:idEmpresa});
@@ -155,9 +159,14 @@ const articulosControllers = {
                 return res.status(401).json({msg:'Articulo inválido'});
             }
 
+            const existeBodega = await Bodegas.traerPorId({pId:idBodega,pEmpId:idEmpresa});
+            if (!existeBodega || !existeBodega.bodEstado) {
+                return res.status(401).json({msg:'Bodega inválida'});
+            }
+
             await Existencias.editarCosto({
                 pEmpId: idEmpresa,
-                pBodegaId: BODEGA_PREDETERMINADA,
+                pBodegaId: idBodega,
                 pArticuloId: idArticulo,
                 pBolsaEstado: 'DISPONIBLE',
                 pPropietarioId: null,
@@ -215,22 +224,26 @@ const articulosControllers = {
         }
     },
 
-    //"ventanilla" de venta: solo articulos activos, vendibles y con existencia DISPONIBLE
+    //"ventanilla" de venta: solo articulos activos, vendibles y con existencia DISPONIBLE.
+    //idBodega es opcional: si se manda, filtra a esa bodega; si no, trae una fila por cada
+    //combinacion articulo+bodega con existencia (util para elegir de que bodega vender cada
+    //renglon, ya que una venta puede mezclar bodegas por linea).
     listarVendibles: async (req,res) => {
         try {
-            const {idEmpresa,campoOrdenar,orden,pagina,textoFiltro} = req.body;
+            const {idEmpresa,idBodega,campoOrdenar,orden,pagina,textoFiltro} = req.body;
 
             const vOrden = orden === 'DESC' ? 'DESC' : 'ASC';
             const vCampoOrdenar = normalizarCampoOrden(campoOrdenar);
             const vTextoFiltro = normalizarTextoFiltro(campoOrdenar, textoFiltro);
+            const vBodegaId = idBodega || '';
 
             let vPagina = Number(pagina);
-            const cantArticulos = await Articulos.contarVendiblesFiltro({pEmpId:idEmpresa,pBodegaId:BODEGA_PREDETERMINADA,pCampoOrden:vCampoOrdenar,pTexto:vTextoFiltro});
+            const cantArticulos = await Articulos.contarVendiblesFiltro({pEmpId:idEmpresa,pBodegaId:vBodegaId,pCampoOrden:vCampoOrdenar,pTexto:vTextoFiltro});
             const maxPagina = Math.max(1, Math.ceil(cantArticulos/50));
             vPagina = Math.min(Math.max(vPagina,1), maxPagina);
             const vOffset = (vPagina - 1) * 50;
 
-            const articulos = await Articulos.traerVendibles({pEmpId:idEmpresa,pBodegaId:BODEGA_PREDETERMINADA,pCampoOrden:vCampoOrdenar,pOrden:vOrden,pOffset:vOffset,pTexto:vTextoFiltro});
+            const articulos = await Articulos.traerVendibles({pEmpId:idEmpresa,pBodegaId:vBodegaId,pCampoOrden:vCampoOrdenar,pOrden:vOrden,pOffset:vOffset,pTexto:vTextoFiltro});
 
             return res.status(200).json({cantData:cantArticulos, data:articulos});
         } catch (error) {

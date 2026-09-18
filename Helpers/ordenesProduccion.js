@@ -10,6 +10,9 @@ const ordenProduccionValidaDatos = async (req,res,next) => {
         if (!Number.isInteger(c.idArticulo)) {
             return res.status(401).json({msg:'idArticulo inválido en consumos'});
         }
+        if (!Number.isInteger(c.idBodega)) {
+            return res.status(401).json({msg:'idBodega inválido en consumos'});
+        }
         if (typeof c.BolsaEstado !== 'string' || c.BolsaEstado.trim().length === 0) {
             return res.status(401).json({msg:'BolsaEstado obligatorio en consumos'});
         }
@@ -24,6 +27,9 @@ const ordenProduccionValidaDatos = async (req,res,next) => {
     for (const p of producidos) {
         if (!Number.isInteger(p.idArticulo)) {
             return res.status(401).json({msg:'idArticulo inválido en producidos'});
+        }
+        if (!Number.isInteger(p.idBodega)) {
+            return res.status(401).json({msg:'idBodega inválido en producidos'});
         }
         if (isNaN(Number(p.Cantidad)) || Number(p.Cantidad) <= 0) {
             return res.status(401).json({msg:'Cantidad inválida en producidos'});

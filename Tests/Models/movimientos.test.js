@@ -43,7 +43,7 @@ test('insertar guarda el movimiento y traerKardex lo devuelve con saldo corrient
         });
 
         const kardex = await Movimientos.traerKardex({
-            pEmpId: 1, pArticuloId: articuloId,
+            pEmpId: 1, pBodegaId: '', pArticuloId: articuloId,
             pFechaInicio: '2020-01-01', pFechaFin: '2100-01-01', pOffset: 0
         }, connection);
 
@@ -51,6 +51,44 @@ test('insertar guarda el movimiento y traerKardex lo devuelve con saldo corrient
         assert.equal(Number(kardex[0].movSaldo), 10);
         assert.equal(Number(kardex[1].movSaldo), 7);
         assert.equal(kardex[0].movBodegaId, bodegaId);
+    });
+});
+
+// El kardex puede filtrarse por bodega: el saldo corriente debe calcularse SOLO sobre los
+// movimientos de esa bodega, sin mezclar los de otra bodega del mismo articulo.
+test('traerKardex filtra por bodega y calcula el saldo solo sobre esa bodega', async () => {
+    await withRollback(async (connection) => {
+        const { articuloId, usuarioId } = await crearArticuloDePrueba(connection);
+        const bodegaAId = await crearBodegaDePrueba(connection, usuarioId);
+        const bodegaBId = await crearBodegaDePrueba(connection, usuarioId);
+
+        await Movimientos.insertar(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaAId, pArticuloId: articuloId,
+            pTipoMovimiento: 'ENTRADA', pBolsaEstado: 'DISPONIBLE', pPropietarioId: null,
+            pCantidad: 10, pCostoUnitario: 50, pMotivo: 'AJUSTE', pTipoOrigen: 'AJUSTE',
+            pOrigenId: null, pObservaciones: 'entrada bodega A'
+        });
+        await Movimientos.insertar(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaBId, pArticuloId: articuloId,
+            pTipoMovimiento: 'ENTRADA', pBolsaEstado: 'DISPONIBLE', pPropietarioId: null,
+            pCantidad: 100, pCostoUnitario: 5, pMotivo: 'AJUSTE', pTipoOrigen: 'AJUSTE',
+            pOrigenId: null, pObservaciones: 'entrada bodega B'
+        });
+
+        const kardexA = await Movimientos.traerKardex({
+            pEmpId: 1, pBodegaId: bodegaAId, pArticuloId: articuloId,
+            pFechaInicio: '2020-01-01', pFechaFin: '2100-01-01', pOffset: 0
+        }, connection);
+
+        assert.equal(kardexA.length, 1);
+        assert.equal(Number(kardexA[0].movSaldo), 10);
+        assert.equal(kardexA[0].movBodegaId, bodegaAId);
+
+        const totalA = await Movimientos.contarKardexFiltro({
+            pEmpId: 1, pBodegaId: bodegaAId, pArticuloId: articuloId,
+            pFechaInicio: '2020-01-01', pFechaFin: '2100-01-01'
+        }, connection);
+        assert.equal(totalA, 1);
     });
 });
 

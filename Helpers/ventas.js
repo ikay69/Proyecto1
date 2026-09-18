@@ -56,6 +56,9 @@ const ventaValidaDatos = async (req,res,next) => {
         if (!Number.isInteger(item.idArticulo)) {
             return res.status(401).json({msg:'idArticulo inválido'});
         }
+        if (!Number.isInteger(item.idBodega)) {
+            return res.status(401).json({msg:'idBodega inválido'});
+        }
         if (isNaN(Number(item.Cantidad)) || Number(item.Cantidad) <= 0) {
             return res.status(401).json({msg:'Cantidad inválida'});
         }

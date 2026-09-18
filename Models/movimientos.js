@@ -12,7 +12,11 @@ const Movimientos = {
         return rows.insertId;
     },
 
-    async traerKardex({pEmpId,pArticuloId,pFechaInicio,pFechaFin,pOffset}, connWrapper = pool){
+    //pBodegaId es opcional (cadena vacia = todas las bodegas del articulo, saldo combinado).
+    //Cuando se filtra por bodega, el saldo corriente (movSaldo) queda calculado SOLO sobre esa
+    //bodega: el WHERE se aplica antes de la funcion de ventana, asi que el saldo nunca mezcla
+    //movimientos de otras bodegas.
+    async traerKardex({pEmpId,pBodegaId,pArticuloId,pFechaInicio,pFechaFin,pOffset}, connWrapper = pool){
         const [rows] = await connWrapper.query(
             `SELECT * FROM (
                 SELECT
@@ -30,21 +34,23 @@ const Movimientos = {
                     LEFT JOIN Terceros t ON t.Id = m.PropietarioId
                     LEFT JOIN Usuarios u ON u.Id = m.UsuarioIdCreador
                 WHERE m.EmpresaId = ? AND m.ArticuloId = ?
+                    AND (? = '' OR m.BodegaId = ?)
                     AND m.FechaMovimiento BETWEEN ? AND ?
             ) AS kardex
             ORDER BY movFecha ASC, movId ASC
             LIMIT 50 OFFSET ?;`,
-            [pEmpId,pArticuloId,pFechaInicio,pFechaFin,pOffset]
+            [pEmpId,pArticuloId,pBodegaId,pBodegaId,pFechaInicio,pFechaFin,pOffset]
         );
         return rows || [];
     },
 
-    async contarKardexFiltro({pEmpId,pArticuloId,pFechaInicio,pFechaFin}, connWrapper = pool){
+    async contarKardexFiltro({pEmpId,pBodegaId,pArticuloId,pFechaInicio,pFechaFin}, connWrapper = pool){
         const [rows] = await connWrapper.query(
             `SELECT COUNT(*) AS total FROM Movimientos
             WHERE EmpresaId = ? AND ArticuloId = ?
+                AND (? = '' OR BodegaId = ?)
                 AND FechaMovimiento BETWEEN ? AND ?;`,
-            [pEmpId,pArticuloId,pFechaInicio,pFechaFin]
+            [pEmpId,pArticuloId,pBodegaId,pBodegaId,pFechaInicio,pFechaFin]
         );
         return rows[0].total;
     },

@@ -45,14 +45,16 @@ router.put('/updatearticulo',[
     validarCampo
 ],articulosControllers.editar);
 
-//editar solo el costo unitario del articulo
+//editar solo el costo unitario del articulo (en una bodega puntual)
 router.put('/updatecostoarticulo',[
     validarJWT,
     validarRol('ADMINISTRADOR'),
     check('idEmpresa','Empresa campo obligatorio').not().isEmpty(),
+    check('idBodega','Bodega campo obligatorio').not().isEmpty(),
     check('idArticulo','Articulo campo obligatorio').not().isEmpty(),
     check('nuevoCosto','Nuevo costo campo obligatorio').not().isEmpty(),
     check('idEmpresa').custom(validarId),
+    check('idBodega').custom(validarId),
     check('idArticulo').custom(validarId),
     validarUsuarioEmpresa,
     articuloValidaCosto,
@@ -87,7 +89,9 @@ router.post('/getactivasarticulo',[
     validarCampo
 ],articulosControllers.listarActivas);
 
-//listar articulos vendibles con existencia disponible (ventanilla de venta, paginado)
+//listar articulos vendibles con existencia disponible (ventanilla de venta, paginado).
+//idBodega es opcional: sin el, trae una fila por articulo+bodega con existencia, para elegir
+//de cual bodega sale cada renglon de la venta.
 router.post('/getvendiblesarticulo',[
     validarJWT,
     validarRol('ADMINISTRADOR','VENDEDOR'),
@@ -96,6 +100,7 @@ router.post('/getvendiblesarticulo',[
     check('orden','Orden campo obligatorio').not().isEmpty(),
     check('pagina','Pagina campo obligatorio').not().isEmpty(),
     check('idEmpresa').custom(validarId),
+    check('idBodega').optional({values:'falsy'}).custom(validarId),
     validarUsuarioEmpresa,
     articuloValidaFiltros,
     validarCampo

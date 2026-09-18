@@ -1,8 +1,8 @@
 import Articulos from '../Models/articulos.js';
 import Movimientos from '../Models/movimientos.js';
 import Terceros from '../Models/terceros.js';
+import Bodegas from '../Models/bodegas.js';
 import { registrarMovimientoTransaccional } from '../Helpers/inventarioTransacciones.js';
-import { BODEGA_PREDETERMINADA } from '../Helpers/bodegaPredeterminada.js';
 
 const SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -23,14 +23,19 @@ const normalizarFechaFin = (fechaFin) => {
 const movimientosControllers = {
     crearAjuste: async (req,res) => {
         try {
-            const {idEmpresa, idArticulo, TipoMovimiento, BolsaEstado, idPropietario, Cantidad, CostoUnitario, Observaciones} = req.body;
+            const {idEmpresa, idBodega, idArticulo, TipoMovimiento, BolsaEstado, idPropietario, Cantidad, CostoUnitario, Observaciones} = req.body;
             const UsuIdLogin = req.usuario.Id;
-            
+
             //sin esta comprobacion un idArticulo de otra empresa llegaria al motor de
             //movimientos y moveria existencias ajenas
             const existeArticulo = await Articulos.traerPorId({pId:idArticulo, pEmpId:idEmpresa});
             if (!existeArticulo) {
                 return res.status(401).json({msg:'Articulo inválido'});
+            }
+
+            const existeBodega = await Bodegas.traerPorId({pId:idBodega, pEmpId:idEmpresa});
+            if (!existeBodega || !existeBodega.bodEstado) {
+                return res.status(401).json({msg:'Bodega inválida'});
             }
 
             //el propietario tambien se valida contra la empresa del token: sin esto, la bolsa
@@ -50,7 +55,7 @@ const movimientosControllers = {
             const movimientoId = await registrarMovimientoTransaccional({
                 pEmpId: idEmpresa,
                 pUsuId: UsuIdLogin,
-                pBodegaId: BODEGA_PREDETERMINADA,
+                pBodegaId: idBodega,
                 pArticuloId: idArticulo,
                 pTipoMovimiento: TipoMovimiento,
                 pBolsaEstado: BolsaEstado,
@@ -77,18 +82,19 @@ const movimientosControllers = {
 
     listarKardex: async (req,res) => {
         try {
-            const {idEmpresa, idArticulo, fechaInicio, fechaFin, pagina} = req.body;
+            const {idEmpresa, idArticulo, idBodega, fechaInicio, fechaFin, pagina} = req.body;
 
             //mysql2 serializa el Date nativamente contra la columna TIMESTAMP
             const vFechaFin = normalizarFechaFin(fechaFin);
+            const vBodegaId = idBodega || '';
 
             let vPagina = Number(pagina);
-            const cantMovimientos = await Movimientos.contarKardexFiltro({pEmpId:idEmpresa, pArticuloId:idArticulo, pFechaInicio:fechaInicio, pFechaFin:vFechaFin});
+            const cantMovimientos = await Movimientos.contarKardexFiltro({pEmpId:idEmpresa, pBodegaId:vBodegaId, pArticuloId:idArticulo, pFechaInicio:fechaInicio, pFechaFin:vFechaFin});
             const maxPagina = Math.max(1, Math.ceil(cantMovimientos/50));
             vPagina = Math.min(Math.max(vPagina,1), maxPagina);
             const vOffset = (vPagina - 1) * 50;
 
-            const movimientos = await Movimientos.traerKardex({pEmpId:idEmpresa, pArticuloId:idArticulo, pFechaInicio:fechaInicio, pFechaFin:vFechaFin, pOffset:vOffset});
+            const movimientos = await Movimientos.traerKardex({pEmpId:idEmpresa, pBodegaId:vBodegaId, pArticuloId:idArticulo, pFechaInicio:fechaInicio, pFechaFin:vFechaFin, pOffset:vOffset});
 
             return res.status(200).json({cantData:cantMovimientos, data:movimientos});
         } catch (error) {

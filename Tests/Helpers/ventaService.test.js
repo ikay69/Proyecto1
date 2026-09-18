@@ -103,26 +103,40 @@ const limpiarRolCliente = async (terceroId, existiaAntes) => {
     await pool.query(`DELETE FROM TercerosRoles WHERE EmpresaId = 1 AND TerceroId = ? AND Rol = 'CLIENTE';`, [terceroId]);
 };
 
-test('agruparLineasPorArticulo suma cantidades del mismo articulo', () => {
+test('agruparLineasPorArticulo suma cantidades del mismo articulo+bodega', () => {
     const resultado = agruparLineasPorArticulo([
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100},
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:3, PrecioVentaUnidad:100}
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100},
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:3, PrecioVentaUnidad:100}
     ]);
     assert.equal(resultado.length, 1);
     assert.equal(resultado[0].Cantidad, 5);
 });
 
-test('agruparLineasPorArticulo rechaza el mismo articulo con precios distintos', () => {
+// el mismo articulo puede venir de bodegas distintas dentro de la misma venta: cada combinacion
+// articulo+bodega es su propio renglon, no se mezclan cantidades entre bodegas.
+test('agruparLineasPorArticulo NO combina el mismo articulo si trae bodegas distintas', () => {
+    const resultado = agruparLineasPorArticulo([
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100},
+        {idArticulo:1, idBodega:2, ArticuloNombre:'A', Cantidad:3, PrecioVentaUnidad:100}
+    ]);
+    assert.equal(resultado.length, 2);
+    assert.equal(resultado[0].idBodega, 1);
+    assert.equal(resultado[0].Cantidad, 2);
+    assert.equal(resultado[1].idBodega, 2);
+    assert.equal(resultado[1].Cantidad, 3);
+});
+
+test('agruparLineasPorArticulo rechaza el mismo articulo+bodega con precios distintos', () => {
     assert.throws(() => agruparLineasPorArticulo([
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100},
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:1, PrecioVentaUnidad:150}
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100},
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:1, PrecioVentaUnidad:150}
     ]), /precios distintos/i);
 });
 
 test('agruparLineasPorArticulo conserva articulos distintos por separado', () => {
     const resultado = agruparLineasPorArticulo([
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100},
-        {idArticulo:2, ArticuloNombre:'B', Cantidad:1, PrecioVentaUnidad:50}
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100},
+        {idArticulo:2, idBodega:1, ArticuloNombre:'B', Cantidad:1, PrecioVentaUnidad:50}
     ]);
     assert.equal(resultado.length, 2);
     assert.equal(resultado[0].idArticulo, 1);
@@ -131,18 +145,18 @@ test('agruparLineasPorArticulo conserva articulos distintos por separado', () =>
 
 test('agruparLineasPorArticulo arrastra el CostoUnitario que resolvio el Controller', () => {
     const resultado = agruparLineasPorArticulo([
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100, CostoUnitario:70}
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100, CostoUnitario:70}
     ]);
     assert.equal(resultado[0].CostoUnitario, 70);
 });
 
 // a diferencia del precio (negociado por venta, dos valores distintos son una contradiccion del
-// llamador), el costo es un dato de la base leido una sola vez por articulo: si llegara repetido
-// con valores distintos no hay nada que decidir, se toma el primero y no se lanza.
-test('agruparLineasPorArticulo toma el primer CostoUnitario si el articulo viene repetido', () => {
+// llamador), el costo es un dato de la base leido una sola vez por articulo+bodega: si llegara
+// repetido con valores distintos no hay nada que decidir, se toma el primero y no se lanza.
+test('agruparLineasPorArticulo toma el primer CostoUnitario si el articulo+bodega viene repetido', () => {
     const resultado = agruparLineasPorArticulo([
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100, CostoUnitario:70},
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:1, PrecioVentaUnidad:100, CostoUnitario:999}
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100, CostoUnitario:70},
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:1, PrecioVentaUnidad:100, CostoUnitario:999}
     ]);
     assert.equal(resultado.length, 1);
     assert.equal(resultado[0].Cantidad, 3);
@@ -151,7 +165,7 @@ test('agruparLineasPorArticulo toma el primer CostoUnitario si el articulo viene
 
 test('agruparLineasPorArticulo deja CostoUnitario en null si la linea no lo trae', () => {
     const resultado = agruparLineasPorArticulo([
-        {idArticulo:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100}
+        {idArticulo:1, idBodega:1, ArticuloNombre:'A', Cantidad:2, PrecioVentaUnidad:100}
     ]);
     assert.equal(resultado[0].CostoUnitario, null);
 });
@@ -166,10 +180,10 @@ test('crearVentaContado descuenta existencia y registra la venta con sus lineas'
         articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:10, costo:100});
 
         ventaId = await crearVentaContado({
-            pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:6000, pValorTransaccion:0,
-            articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
+            articulosVendidos:[{idArticulo:articuloId, idBodega:bodegaId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
         });
 
         const bolsas = await Existencias.traerBolsasPorArticulo({pEmpId:1, pArticuloId:articuloId});
@@ -186,6 +200,7 @@ test('crearVentaContado descuenta existencia y registra la venta con sus lineas'
         assert.equal(lineas.length, 1);
         assert.equal(Number(lineas[0].detCantidad), 2);
         assert.equal(Number(lineas[0].detPrecioVentaUnidad), 3000);
+        assert.equal(lineas[0].detBodegaId, bodegaId);
 
         const movimientos = await Movimientos.traerPorOrigen({pEmpId:1, pTipoOrigen:'VENTA', pOrigenId:ventaId});
         assert.equal(movimientos.length, 1);
@@ -209,9 +224,9 @@ test('crearVentaContado descuenta existencia y registra la venta con sus lineas'
     }
 });
 
-// La venta solo debe tocar la bodega indicada: si el mismo articulo tiene existencia DISPONIBLE
-// en otra bodega, esa otra bolsa debe quedar intacta.
-test('crearVentaContado solo descuenta la bodega de la venta, no otras bodegas del mismo articulo', async () => {
+// La venta solo debe tocar la bodega de CADA renglon: si el mismo articulo tiene existencia
+// DISPONIBLE en otra bodega que no aparece en ningun renglon, esa otra bolsa debe quedar intacta.
+test('crearVentaContado solo descuenta la bodega de cada renglon, no otras bodegas del mismo articulo', async () => {
     const { productoId, usuarioId, terceroId } = await traerContexto();
     const teniaRolCliente = await rolClienteExistia(terceroId);
     const bodegaVentaId = await crearBodegaDePrueba(usuarioId);
@@ -227,10 +242,10 @@ test('crearVentaContado solo descuenta la bodega de la venta, no otras bodegas d
         });
 
         ventaId = await crearVentaContado({
-            pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaVentaId, pTerceroId:terceroId,
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:6000, pValorTransaccion:0,
-            articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
+            articulosVendidos:[{idArticulo:articuloId, idBodega:bodegaVentaId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
         });
 
         const bolsaVenta = await Existencias.traerBolsa({pEmpId:1, pBodegaId:bodegaVentaId, pArticuloId:articuloId, pBolsaEstado:'DISPONIBLE', pPropietarioId:null});
@@ -247,7 +262,63 @@ test('crearVentaContado solo descuenta la bodega de la venta, no otras bodegas d
     }
 });
 
-test('crearVentaContado agrupa dos lineas del mismo articulo en una sola fila y un solo movimiento', async () => {
+// Escenario central de "una bodega por renglon": el mismo articulo se vende en parte desde una
+// bodega y en parte desde otra, en la MISMA venta. Debe quedar como 2 filas en VentaDetalles (una
+// por articulo+bodega) y 2 Movimientos, cada uno descontando su propia bolsa.
+test('crearVentaContado permite vender el mismo articulo repartido entre dos bodegas en una sola venta', async () => {
+    const { productoId, usuarioId, terceroId } = await traerContexto();
+    const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaAId = await crearBodegaDePrueba(usuarioId);
+    const bodegaBId = await crearBodegaDePrueba(usuarioId);
+
+    let articuloId, ventaId;
+    try {
+        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId:bodegaAId, cantidad:2, costo:100});
+        await Existencias.upsertCantidadYCosto(pool, {
+            pEmpId:1, pBodegaId:bodegaBId, pArticuloId:articuloId, pBolsaEstado:'DISPONIBLE',
+            pPropietarioId:null, pDelta:3, pCosto:120
+        });
+
+        ventaId = await crearVentaContado({
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+            pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
+            pValorDescuento:0, pValorEfectivo:15000, pValorTransaccion:0,
+            articulosVendidos:[
+                {idArticulo:articuloId, idBodega:bodegaAId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100},
+                {idArticulo:articuloId, idBodega:bodegaBId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:3, PrecioVentaUnidad:3000, CostoUnitario:120}
+            ]
+        });
+
+        const lineas = await VentaDetalles.traerPorVenta({pEmpId:1, pVentaId:ventaId});
+        assert.equal(lineas.length, 2);
+        const lineaA = lineas.find(l => l.detBodegaId === bodegaAId);
+        const lineaB = lineas.find(l => l.detBodegaId === bodegaBId);
+        assert.equal(Number(lineaA.detCantidad), 2);
+        assert.equal(Number(lineaB.detCantidad), 3);
+
+        const movimientos = await Movimientos.traerPorOrigen({pEmpId:1, pTipoOrigen:'VENTA', pOrigenId:ventaId});
+        assert.equal(movimientos.length, 2);
+        const movA = movimientos.find(m => m.movBodegaId === bodegaAId);
+        const movB = movimientos.find(m => m.movBodegaId === bodegaBId);
+        assert.equal(Number(movA.movCantidad), 2);
+        assert.equal(Number(movA.movCosto), 100);
+        assert.equal(Number(movB.movCantidad), 3);
+        assert.equal(Number(movB.movCosto), 120);
+
+        const bolsaA = await Existencias.traerBolsa({pEmpId:1, pBodegaId:bodegaAId, pArticuloId:articuloId, pBolsaEstado:'DISPONIBLE', pPropietarioId:null});
+        const bolsaB = await Existencias.traerBolsa({pEmpId:1, pBodegaId:bodegaBId, pArticuloId:articuloId, pBolsaEstado:'DISPONIBLE', pPropietarioId:null});
+        assert.equal(Number(bolsaA.Cantidad), 0);
+        assert.equal(Number(bolsaB.Cantidad), 0);
+    } finally {
+        await limpiarVenta(ventaId);
+        await limpiarArticulo(articuloId);
+        await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaAId);
+        await limpiarBodega(bodegaBId);
+    }
+});
+
+test('crearVentaContado agrupa dos lineas del mismo articulo+bodega en una sola fila y un solo movimiento', async () => {
     const { productoId, usuarioId, terceroId } = await traerContexto();
     const teniaRolCliente = await rolClienteExistia(terceroId);
     const bodegaId = await crearBodegaDePrueba(usuarioId);
@@ -257,12 +328,12 @@ test('crearVentaContado agrupa dos lineas del mismo articulo en una sola fila y 
         articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:10, costo:100});
 
         ventaId = await crearVentaContado({
-            pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:9000, pValorTransaccion:0,
             articulosVendidos:[
-                {idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100},
-                {idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:1, PrecioVentaUnidad:3000, CostoUnitario:100}
+                {idArticulo:articuloId, idBodega:bodegaId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100},
+                {idArticulo:articuloId, idBodega:bodegaId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:1, PrecioVentaUnidad:3000, CostoUnitario:100}
             ]
         });
 
@@ -295,10 +366,10 @@ test('crearVentaContado rechaza un saldo distinto de cero y no toca inventario',
 
         await assert.rejects(
             () => crearVentaContado({
-                pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
+                pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
                 pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
                 pValorDescuento:0, pValorEfectivo:100, pValorTransaccion:0,
-                articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
+                articulosVendidos:[{idArticulo:articuloId, idBodega:bodegaId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
             }),
             /cubrir/i
         );
@@ -318,26 +389,21 @@ test('crearVentaContado rechaza un saldo distinto de cero y no toca inventario',
 
 test('crearVentaContado rechaza una venta sin articulos antes de tocar la base de datos', async () => {
     const { usuarioId, terceroId } = await traerContexto();
-    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
-    try {
-        const [ventasAntes] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
+    const [ventasAntes] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
 
-        await assert.rejects(
-            () => crearVentaContado({
-                pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
-                pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
-                pValorDescuento:0, pValorEfectivo:0, pValorTransaccion:0,
-                articulosVendidos:[]
-            }),
-            /al menos una l/i
-        );
+    await assert.rejects(
+        () => crearVentaContado({
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+            pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
+            pValorDescuento:0, pValorEfectivo:0, pValorTransaccion:0,
+            articulosVendidos:[]
+        }),
+        /al menos una l/i
+    );
 
-        const [ventasDespues] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
-        assert.equal(Number(ventasDespues[0].total), Number(ventasAntes[0].total));
-    } finally {
-        await limpiarBodega(bodegaId);
-    }
+    const [ventasDespues] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
+    assert.equal(Number(ventasDespues[0].total), Number(ventasAntes[0].total));
 });
 
 // Esta es la prueba que justifica que toda la venta viva en UNA sola transaccion: la primera linea
@@ -360,12 +426,12 @@ test('crearVentaContado revierte la venta completa si una linea posterior no tie
         // alcanza de segunda, que es justo el escenario que esta prueba necesita.
         await assert.rejects(
             () => crearVentaContado({
-                pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
+                pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
                 pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
                 pValorDescuento:0, pValorEfectivo:8000, pValorTransaccion:0,
                 articulosVendidos:[
-                    {idArticulo:articuloConSaldoId, ArticuloNombre:'LINEA QUE SI ALCANZA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100},
-                    {idArticulo:articuloSinSaldoId, ArticuloNombre:'LINEA SIN EXISTENCIA', Cantidad:2, PrecioVentaUnidad:1000, CostoUnitario:50}
+                    {idArticulo:articuloConSaldoId, idBodega:bodegaId, ArticuloNombre:'LINEA QUE SI ALCANZA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100},
+                    {idArticulo:articuloSinSaldoId, idBodega:bodegaId, ArticuloNombre:'LINEA SIN EXISTENCIA', Cantidad:2, PrecioVentaUnidad:1000, CostoUnitario:50}
                 ]
             }),
             /Existencia insuficiente/
@@ -400,11 +466,11 @@ test('crearVentaContado revierte la venta completa si una linea posterior no tie
     }
 });
 
-// Cada linea toma un SELECT ... FOR UPDATE sobre la bolsa DISPONIBLE de su articulo. Si el orden
-// de los locks dependiera del payload, dos ventas concurrentes con los mismos dos articulos en
-// orden opuesto podrian bloquearse mutuamente (deadlock ABBA). crearVentaContado ordena las lineas
-// por id de articulo ANTES de abrir la transaccion; esta prueba manda las lineas en orden
-// descendente y verifica que los Movimientos quedaron escritos en orden ascendente
+// Cada linea toma un SELECT ... FOR UPDATE sobre la bolsa DISPONIBLE de su articulo+bodega. Si el
+// orden de los locks dependiera del payload, dos ventas concurrentes con los mismos dos articulos
+// en orden opuesto podrian bloquearse mutuamente (deadlock ABBA). crearVentaContado ordena las
+// lineas por (idArticulo, idBodega) ANTES de abrir la transaccion; esta prueba manda las lineas en
+// orden descendente y verifica que los Movimientos quedaron escritos en orden ascendente
 // (Movimientos.traerPorOrigen ordena por m.Id, o sea por orden real de insercion), que es lo unico
 // que demuestra que el sort corre antes del bucle y no solo que la venta no falla.
 test('crearVentaContado toma los articulos en orden ascendente de id sin importar el orden del payload', async () => {
@@ -420,12 +486,12 @@ test('crearVentaContado toma los articulos en orden ascendente de id sin importa
 
         // payload deliberadamente al reves: primero el id mayor
         ventaId = await crearVentaContado({
-            pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:5000, pValorTransaccion:0,
             articulosVendidos:[
-                {idArticulo:articuloSegundoId, ArticuloNombre:'ID MAYOR', Cantidad:1, PrecioVentaUnidad:2000, CostoUnitario:250},
-                {idArticulo:articuloPrimeroId, ArticuloNombre:'ID MENOR', Cantidad:1, PrecioVentaUnidad:3000, CostoUnitario:100}
+                {idArticulo:articuloSegundoId, idBodega:bodegaId, ArticuloNombre:'ID MAYOR', Cantidad:1, PrecioVentaUnidad:2000, CostoUnitario:250},
+                {idArticulo:articuloPrimeroId, idBodega:bodegaId, ArticuloNombre:'ID MENOR', Cantidad:1, PrecioVentaUnidad:3000, CostoUnitario:100}
             ]
         });
 

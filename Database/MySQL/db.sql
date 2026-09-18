@@ -330,14 +330,16 @@ CREATE TABLE VentaDetalles(
     EmpresaId           BIGINT UNSIGNED NOT NULL,
     VentaId             BIGINT UNSIGNED NOT NULL,
 
+    BodegaId            BIGINT UNSIGNED NOT NULL,
     ArticuloId          BIGINT UNSIGNED NOT NULL,
     ArticuloNombre      VARCHAR(150) NOT NULL,
 
     Cantidad            DECIMAL(12,2) NOT NULL,
     PrecioVentaUnidad   DECIMAL(12,2) NOT NULL,
 
-    CONSTRAINT uq_ventadetalle_articulo UNIQUE (EmpresaId, VentaId, ArticuloId),
+    CONSTRAINT uq_ventadetalle_articulo UNIQUE (EmpresaId, VentaId, ArticuloId, BodegaId),
     CONSTRAINT fk_ventadetalle_empresa   FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
     CONSTRAINT fk_ventadetalle_venta     FOREIGN KEY (VentaId) REFERENCES Ventas(Id),
+    CONSTRAINT fk_ventadetalle_bodega    FOREIGN KEY (BodegaId) REFERENCES Bodegas(Id),
     CONSTRAINT fk_ventadetalle_articulo  FOREIGN KEY (ArticuloId) REFERENCES Articulos(Id)
 );

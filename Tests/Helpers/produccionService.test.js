@@ -96,9 +96,9 @@ test('crearOrdenProduccion consume materia prima y produce un articulo nuevo con
         });
 
         ordenId = await crearOrdenProduccion({
-            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: 'fundicion de prueba',
-            consumos: [{ idArticulo: materiaPrimaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 4 }],
-            producidos: [{ idArticulo: joyaId, Cantidad: 1, CostoUnitario: null }]
+            pEmpId: 1, pUsuId: usuarioId, pObservaciones: 'fundicion de prueba',
+            consumos: [{ idArticulo: materiaPrimaId, idBodega: bodegaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 4 }],
+            producidos: [{ idArticulo: joyaId, idBodega: bodegaId, Cantidad: 1, CostoUnitario: null }]
         });
 
         const connVerif = await pool.getConnection();
@@ -132,6 +132,66 @@ test('crearOrdenProduccion consume materia prima y produce un articulo nuevo con
     }
 });
 
+// El consumo y lo producido pueden vivir en bodegas distintas (ej. materia prima en la bodega
+// de insumos, la joya terminada entra a la bodega de exhibicion): cada item de consumos/
+// producidos lleva su propia idBodega, sin que una tenga que coincidir con la otra.
+test('crearOrdenProduccion consume de una bodega y produce en otra distinta', async () => {
+    const { productoId, usuarioId } = await traerContexto();
+    const bodegaMateriaPrimaId = await crearBodegaDePrueba(usuarioId);
+    const bodegaJoyeriaId = await crearBodegaDePrueba(usuarioId);
+
+    let materiaPrimaId, joyaId, ordenId;
+    try {
+        materiaPrimaId = await sembrarArticuloConExistencia({
+            empId: 1, usuarioId, productoId, bodegaId: bodegaMateriaPrimaId, cantidad: 10, costo: 100
+        });
+        joyaId = await Articulos.crear({
+            pEmpId: 1, pUsuIdCrea: usuarioId, pProductoId: productoId,
+            pNombre: 'JOYA EN OTRA BODEGA', pDescripcion: null, pPrecioVentaUnitario: null, pPropiedades: []
+        });
+
+        ordenId = await crearOrdenProduccion({
+            pEmpId: 1, pUsuId: usuarioId, pObservaciones: 'fundicion entre bodegas distintas',
+            consumos: [{ idArticulo: materiaPrimaId, idBodega: bodegaMateriaPrimaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 4 }],
+            producidos: [{ idArticulo: joyaId, idBodega: bodegaJoyeriaId, Cantidad: 1, CostoUnitario: null }]
+        });
+
+        const connVerif = await pool.getConnection();
+        try {
+            // la materia prima bajo en SU bodega
+            const bolsaMateriaPrima = await Existencias.traerBolsaBloqueada(connVerif, {
+                pEmpId: 1, pBodegaId: bodegaMateriaPrimaId, pArticuloId: materiaPrimaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+            });
+            assert.equal(Number(bolsaMateriaPrima.Cantidad), 6);
+
+            // la joya entro en SU bodega (distinta a la de la materia prima), no en la de la materia prima
+            const bolsaJoyaOtraBodega = await Existencias.traerBolsaBloqueada(connVerif, {
+                pEmpId: 1, pBodegaId: bodegaJoyeriaId, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+            });
+            assert.equal(Number(bolsaJoyaOtraBodega.Cantidad), 1);
+
+            const bolsaJoyaBodegaMateriaPrima = await Existencias.traerBolsaBloqueada(connVerif, {
+                pEmpId: 1, pBodegaId: bodegaMateriaPrimaId, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+            });
+            assert.equal(bolsaJoyaBodegaMateriaPrima, null);
+        } finally {
+            connVerif.release();
+        }
+
+        const movimientosOrden = await Movimientos.traerPorOrigen({ pEmpId: 1, pTipoOrigen: 'PRODUCCION', pOrigenId: ordenId });
+        const salida = movimientosOrden.find(m => m.movTipo === 'SALIDA');
+        const entrada = movimientosOrden.find(m => m.movTipo === 'ENTRADA');
+        assert.equal(salida.movBodegaId, bodegaMateriaPrimaId);
+        assert.equal(entrada.movBodegaId, bodegaJoyeriaId);
+    } finally {
+        await limpiarArticulo(materiaPrimaId);
+        await limpiarArticulo(joyaId);
+        if (ordenId) await pool.query(`DELETE FROM OrdenesProduccion WHERE Id = ?;`, [ordenId]);
+        await limpiarBodega(bodegaMateriaPrimaId);
+        await limpiarBodega(bodegaJoyeriaId);
+    }
+});
+
 test('crearOrdenProduccion respeta un costoUnitario explicito en el producido', async () => {
     const { productoId, usuarioId } = await traerContexto();
     const bodegaId = await crearBodegaDePrueba(usuarioId);
@@ -147,9 +207,9 @@ test('crearOrdenProduccion respeta un costoUnitario explicito en el producido', 
         });
 
         ordenId = await crearOrdenProduccion({
-            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: null,
-            consumos: [{ idArticulo: materiaPrimaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 2 }],
-            producidos: [{ idArticulo: joyaId, Cantidad: 1, CostoUnitario: 500 }]
+            pEmpId: 1, pUsuId: usuarioId, pObservaciones: null,
+            consumos: [{ idArticulo: materiaPrimaId, idBodega: bodegaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 2 }],
+            producidos: [{ idArticulo: joyaId, idBodega: bodegaId, Cantidad: 1, CostoUnitario: 500 }]
         });
 
         const connVerif = await pool.getConnection();
@@ -193,12 +253,12 @@ test('crearOrdenProduccion revierte toda la orden si un consumo posterior falla'
 
         await assert.rejects(
             () => crearOrdenProduccion({
-                pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: 'fundicion que falla',
+                pEmpId: 1, pUsuId: usuarioId, pObservaciones: 'fundicion que falla',
                 consumos: [
-                    { idArticulo: materiaPrimaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 4 },
-                    { idArticulo: materiaPrimaSinSaldoId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 999 }
+                    { idArticulo: materiaPrimaId, idBodega: bodegaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 4 },
+                    { idArticulo: materiaPrimaSinSaldoId, idBodega: bodegaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 999 }
                 ],
-                producidos: [{ idArticulo: joyaId, Cantidad: 1, CostoUnitario: null }]
+                producidos: [{ idArticulo: joyaId, idBodega: bodegaId, Cantidad: 1, CostoUnitario: null }]
             }),
             /Existencia insuficiente/
         );
@@ -245,16 +305,16 @@ test('crearOrdenProduccion rechaza una orden sin consumos o sin producidos', asy
     try {
         await assert.rejects(
             () => crearOrdenProduccion({
-                pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: null,
-                consumos: [], producidos: [{ idArticulo: 1, Cantidad: 1, CostoUnitario: 10 }]
+                pEmpId: 1, pUsuId: usuarioId, pObservaciones: null,
+                consumos: [], producidos: [{ idArticulo: 1, idBodega: bodegaId, Cantidad: 1, CostoUnitario: 10 }]
             }),
             /al menos un consumo/
         );
 
         await assert.rejects(
             () => crearOrdenProduccion({
-                pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: null,
-                consumos: [{ idArticulo: 1, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 1 }],
+                pEmpId: 1, pUsuId: usuarioId, pObservaciones: null,
+                consumos: [{ idArticulo: 1, idBodega: bodegaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 1 }],
                 producidos: []
             }),
             /al menos un art/

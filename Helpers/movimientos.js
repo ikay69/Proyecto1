@@ -3,8 +3,11 @@
 import { BOLSAS_VALIDAS, TIPOS_MOVIMIENTO_VALIDOS } from './existenciaReglas.js';
 
 const movimientoValidaAjuste = async (req,res,next) => {
-    const {TipoMovimiento, BolsaEstado, idPropietario, Cantidad, CostoUnitario, Observaciones} = req.body;
+    const {idBodega, TipoMovimiento, BolsaEstado, idPropietario, Cantidad, CostoUnitario, Observaciones} = req.body;
 
+    if (!Number.isInteger(idBodega)) {
+        return res.status(401).json({msg:'Bodega inválida'});
+    }
     if (!TIPOS_MOVIMIENTO_VALIDOS.includes(TipoMovimiento)) {
         return res.status(401).json({msg:'Tipo de movimiento inválido'});
     }
@@ -29,11 +32,15 @@ const movimientoValidaAjuste = async (req,res,next) => {
     next();
 };
 
+//idBodega es opcional: ausente o vacio significa "sin filtrar por bodega" (saldo combinado)
 const movimientoValidaKardexFiltros = async (req,res,next) => {
-    const {idArticulo, fechaInicio, fechaFin, pagina} = req.body;
+    const {idArticulo, idBodega, fechaInicio, fechaFin, pagina} = req.body;
 
     if (!Number.isInteger(idArticulo)) {
         return res.status(401).json({msg:'Articulo inválido'});
+    }
+    if (idBodega !== undefined && idBodega !== null && idBodega !== '' && !Number.isInteger(idBodega)) {
+        return res.status(401).json({msg:'Bodega inválida'});
     }
     if (!fechaInicio || isNaN(Date.parse(fechaInicio))) {
         return res.status(401).json({msg:'Fecha inicio inválida'});

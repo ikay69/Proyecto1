@@ -41,7 +41,7 @@ const agruparLineasPorArticulo = (articulos) => {
 //(una llamada por linea). Si cualquier articulo no tiene existencia suficiente, se revierte
 //todo -- cabecera, lineas y cualquier movimiento ya aplicado.
 const crearVentaContado = async ({
-    pEmpId, pUsuId, pTerceroId, pTerceroTipoDoc, pTerceroNumeroDoc, pTerceroNombre,
+    pEmpId, pUsuId, pBodegaId, pTerceroId, pTerceroTipoDoc, pTerceroNumeroDoc, pTerceroNombre,
     pValorDescuento, pValorEfectivo, pValorTransaccion, articulosVendidos
 }) => {
     //toda la validacion vive fuera de la transaccion: una venta invalida (saldo != 0, sin
@@ -100,7 +100,7 @@ const crearVentaContado = async ({
         //este bucle ya no toca el pool: solo usa `connection`, la conexion de esta transaccion.
         for (const linea of lineasAgrupadas) {
             await registrarMovimiento(connection, {
-                pEmpId, pUsuId,
+                pEmpId, pUsuId, pBodegaId,
                 pArticuloId: linea.idArticulo,
                 pTipoMovimiento: 'SALIDA',
                 pBolsaEstado: 'DISPONIBLE',

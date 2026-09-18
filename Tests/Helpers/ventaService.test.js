@@ -20,14 +20,30 @@ const generarSKUDePrueba = (prefijo = 'V') => {
     return `${prefijo}${tiempo}${azar}`;
 };
 
-// Siembra el articulo y su bolsa DISPONIBLE escribiendo directo en las tablas, sin pasar por
-// registrarMovimientoTransaccional. Dos razones (las mismas que documenta produccionService.test.js):
+// Bodegas.Nombre tiene UNIQUE (EmpresaId, Nombre): cada bodega de prueba usa un nombre unico.
+const crearBodegaDePrueba = async (usuarioId) => {
+    const nombre = `BODEGA PRUEBA ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const [insertResult] = await pool.query(
+        `INSERT INTO Bodegas(EmpresaId, UsuarioIdCreador, Nombre) VALUES (1, ?, ?);`,
+        [usuarioId, nombre]
+    );
+    return insertResult.insertId;
+};
+
+const limpiarBodega = async (bodegaId) => {
+    if (!bodegaId) return;
+    await pool.query(`DELETE FROM Bodegas WHERE Id = ?;`, [bodegaId]);
+};
+
+// Siembra el articulo y su bolsa DISPONIBLE en la bodega indicada, escribiendo directo en las
+// tablas, sin pasar por registrarMovimientoTransaccional. Dos razones (las mismas que documenta
+// produccionService.test.js):
 //  - el unico movimiento que puede existir despues es el de la venta, asi las aserciones sobre
 //    Movimientos ("cero rastro") son exactas;
 //  - registrarMovimientoTransaccional bloquea una bolsa todavia inexistente (SELECT ... FOR UPDATE
 //    deja un gap lock en uq_existencias_bolsa) y recien despues inserta; ese patron produce
 //    deadlocks intermitentes de InnoDB cuando varios archivos de prueba corren a la vez.
-const sembrarArticuloConExistencia = async ({empId, usuarioId, productoId, cantidad, costo}) => {
+const sembrarArticuloConExistencia = async ({empId, usuarioId, productoId, bodegaId, cantidad, costo}) => {
     const conn = await pool.getConnection();
     try {
         await conn.beginTransaction();
@@ -38,7 +54,7 @@ const sembrarArticuloConExistencia = async ({empId, usuarioId, productoId, canti
         );
         const articuloId = insertResult.insertId;
         await Existencias.upsertCantidadYCosto(conn, {
-            pEmpId: empId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pEmpId: empId, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
             pPropietarioId: null, pDelta: cantidad, pCosto: costo
         });
         await conn.commit();
@@ -143,13 +159,14 @@ test('agruparLineasPorArticulo deja CostoUnitario en null si la linea no lo trae
 test('crearVentaContado descuenta existencia y registra la venta con sus lineas', async () => {
     const { productoId, usuarioId, terceroId } = await traerContexto();
     const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let articuloId, ventaId;
     try {
-        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:10, costo:100});
+        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:10, costo:100});
 
         ventaId = await crearVentaContado({
-            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+            pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:6000, pValorTransaccion:0,
             articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
@@ -175,6 +192,7 @@ test('crearVentaContado descuenta existencia y registra la venta con sus lineas'
         assert.equal(movimientos[0].movTipo, 'SALIDA');
         assert.equal(movimientos[0].movBolsa, 'DISPONIBLE');
         assert.equal(Number(movimientos[0].movCantidad), 2);
+        assert.equal(movimientos[0].movBodegaId, bodegaId);
         // el kardex guarda el costo que el llamador (el Controller, que ya leyo el Articulo para
         // validarlo) entrego en la linea, no null: es la unica base para calcular el costo de
         // ventas despues.
@@ -187,19 +205,59 @@ test('crearVentaContado descuenta existencia y registra la venta con sus lineas'
         await limpiarVenta(ventaId);
         await limpiarArticulo(articuloId);
         await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+// La venta solo debe tocar la bodega indicada: si el mismo articulo tiene existencia DISPONIBLE
+// en otra bodega, esa otra bolsa debe quedar intacta.
+test('crearVentaContado solo descuenta la bodega de la venta, no otras bodegas del mismo articulo', async () => {
+    const { productoId, usuarioId, terceroId } = await traerContexto();
+    const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaVentaId = await crearBodegaDePrueba(usuarioId);
+    const otraBodegaId = await crearBodegaDePrueba(usuarioId);
+
+    let articuloId, ventaId;
+    try {
+        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId:bodegaVentaId, cantidad:10, costo:100});
+        // misma pieza (mismo articulo), stock independiente en otra bodega
+        await Existencias.upsertCantidadYCosto(pool, {
+            pEmpId:1, pBodegaId:otraBodegaId, pArticuloId:articuloId, pBolsaEstado:'DISPONIBLE',
+            pPropietarioId:null, pDelta:7, pCosto:100
+        });
+
+        ventaId = await crearVentaContado({
+            pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaVentaId, pTerceroId:terceroId,
+            pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
+            pValorDescuento:0, pValorEfectivo:6000, pValorTransaccion:0,
+            articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
+        });
+
+        const bolsaVenta = await Existencias.traerBolsa({pEmpId:1, pBodegaId:bodegaVentaId, pArticuloId:articuloId, pBolsaEstado:'DISPONIBLE', pPropietarioId:null});
+        const bolsaOtra = await Existencias.traerBolsa({pEmpId:1, pBodegaId:otraBodegaId, pArticuloId:articuloId, pBolsaEstado:'DISPONIBLE', pPropietarioId:null});
+
+        assert.equal(Number(bolsaVenta.Cantidad), 8);
+        assert.equal(Number(bolsaOtra.Cantidad), 7);
+    } finally {
+        await limpiarVenta(ventaId);
+        await limpiarArticulo(articuloId);
+        await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaVentaId);
+        await limpiarBodega(otraBodegaId);
     }
 });
 
 test('crearVentaContado agrupa dos lineas del mismo articulo en una sola fila y un solo movimiento', async () => {
     const { productoId, usuarioId, terceroId } = await traerContexto();
     const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let articuloId, ventaId;
     try {
-        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:10, costo:100});
+        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:10, costo:100});
 
         ventaId = await crearVentaContado({
-            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+            pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:9000, pValorTransaccion:0,
             articulosVendidos:[
@@ -222,20 +280,22 @@ test('crearVentaContado agrupa dos lineas del mismo articulo en una sola fila y 
         await limpiarVenta(ventaId);
         await limpiarArticulo(articuloId);
         await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaId);
     }
 });
 
 test('crearVentaContado rechaza un saldo distinto de cero y no toca inventario', async () => {
     const { productoId, usuarioId, terceroId } = await traerContexto();
     const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let articuloId;
     try {
-        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:10, costo:100});
+        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:10, costo:100});
 
         await assert.rejects(
             () => crearVentaContado({
-                pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+                pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
                 pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
                 pValorDescuento:0, pValorEfectivo:100, pValorTransaccion:0,
                 articulosVendidos:[{idArticulo:articuloId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
@@ -252,26 +312,32 @@ test('crearVentaContado rechaza un saldo distinto de cero y no toca inventario',
     } finally {
         await limpiarArticulo(articuloId);
         await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaId);
     }
 });
 
 test('crearVentaContado rechaza una venta sin articulos antes de tocar la base de datos', async () => {
     const { usuarioId, terceroId } = await traerContexto();
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
-    const [ventasAntes] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
+    try {
+        const [ventasAntes] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
 
-    await assert.rejects(
-        () => crearVentaContado({
-            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
-            pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
-            pValorDescuento:0, pValorEfectivo:0, pValorTransaccion:0,
-            articulosVendidos:[]
-        }),
-        /al menos una l/i
-    );
+        await assert.rejects(
+            () => crearVentaContado({
+                pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
+                pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
+                pValorDescuento:0, pValorEfectivo:0, pValorTransaccion:0,
+                articulosVendidos:[]
+            }),
+            /al menos una l/i
+        );
 
-    const [ventasDespues] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
-    assert.equal(Number(ventasDespues[0].total), Number(ventasAntes[0].total));
+        const [ventasDespues] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
+        assert.equal(Number(ventasDespues[0].total), Number(ventasAntes[0].total));
+    } finally {
+        await limpiarBodega(bodegaId);
+    }
 });
 
 // Esta es la prueba que justifica que toda la venta viva en UNA sola transaccion: la primera linea
@@ -280,11 +346,12 @@ test('crearVentaContado rechaza una venta sin articulos antes de tocar la base d
 test('crearVentaContado revierte la venta completa si una linea posterior no tiene existencia', async () => {
     const { productoId, usuarioId, terceroId } = await traerContexto();
     const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let articuloConSaldoId, articuloSinSaldoId;
     try {
-        articuloConSaldoId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:10, costo:100});
-        articuloSinSaldoId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:1, costo:50});
+        articuloConSaldoId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:10, costo:100});
+        articuloSinSaldoId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:1, costo:50});
 
         const [ventasAntes] = await pool.query(`SELECT COUNT(*) AS total FROM Ventas WHERE EmpresaId = 1;`);
 
@@ -293,7 +360,7 @@ test('crearVentaContado revierte la venta completa si una linea posterior no tie
         // alcanza de segunda, que es justo el escenario que esta prueba necesita.
         await assert.rejects(
             () => crearVentaContado({
-                pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+                pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
                 pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
                 pValorDescuento:0, pValorEfectivo:8000, pValorTransaccion:0,
                 articulosVendidos:[
@@ -329,6 +396,7 @@ test('crearVentaContado revierte la venta completa si una linea posterior no tie
         await limpiarArticulo(articuloConSaldoId);
         await limpiarArticulo(articuloSinSaldoId);
         await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaId);
     }
 });
 
@@ -342,16 +410,17 @@ test('crearVentaContado revierte la venta completa si una linea posterior no tie
 test('crearVentaContado toma los articulos en orden ascendente de id sin importar el orden del payload', async () => {
     const { productoId, usuarioId, terceroId } = await traerContexto();
     const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let articuloPrimeroId, articuloSegundoId, ventaId;
     try {
-        articuloPrimeroId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:5, costo:100});
-        articuloSegundoId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, cantidad:5, costo:250});
+        articuloPrimeroId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:5, costo:100});
+        articuloSegundoId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:5, costo:250});
         assert.ok(articuloSegundoId > articuloPrimeroId, 'el segundo articulo sembrado debe tener el Id mayor');
 
         // payload deliberadamente al reves: primero el id mayor
         ventaId = await crearVentaContado({
-            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+            pEmpId:1, pUsuId:usuarioId, pBodegaId:bodegaId, pTerceroId:terceroId,
             pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
             pValorDescuento:0, pValorEfectivo:5000, pValorTransaccion:0,
             articulosVendidos:[
@@ -373,5 +442,6 @@ test('crearVentaContado toma los articulos en orden ascendente de id sin importa
         await limpiarArticulo(articuloPrimeroId);
         await limpiarArticulo(articuloSegundoId);
         await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaId);
     }
 });

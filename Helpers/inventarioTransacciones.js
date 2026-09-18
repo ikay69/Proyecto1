@@ -11,7 +11,7 @@ import { validarPropietarioBolsa } from './existenciaReglas.js';
 //una salida mayor al saldo ANTES de escribir nada -> upsert de la bolsa -> recosteo -> kardex.
 const registrarMovimiento = async (connection, datos) => {
     const {
-        pEmpId, pUsuId, pArticuloId, pTipoMovimiento, pBolsaEstado, pPropietarioId,
+        pEmpId, pUsuId, pBodegaId, pArticuloId, pTipoMovimiento, pBolsaEstado, pPropietarioId,
         pCantidad, pCostoUnitario, pMotivo, pTipoOrigen, pOrigenId, pObservaciones
     } = datos;
 
@@ -31,7 +31,7 @@ const registrarMovimiento = async (connection, datos) => {
 
     
     const bolsaActual = await Existencias.traerBolsaBloqueada(connection, {
-        pEmpId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId
+        pEmpId, pBodegaId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId
     });
     const cantidadActual = bolsaActual ? Number(bolsaActual.Cantidad) : 0; //si no existe coloque cero
     
@@ -52,16 +52,16 @@ const registrarMovimiento = async (connection, datos) => {
             costoEntrante: pCostoUnitario
         });
         await Existencias.upsertCantidadYCosto(connection, {
-            pEmpId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId, pDelta: delta, pCosto: nuevoCosto
+            pEmpId, pBodegaId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId, pDelta: delta, pCosto: nuevoCosto
         });
     } else {
         await Existencias.upsertCantidad(connection, {
-            pEmpId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId, pDelta: delta
+            pEmpId, pBodegaId, pArticuloId, pBolsaEstado, pPropietarioId: propietarioId, pDelta: delta
         });
     }
 
     const movimientoId = await Movimientos.insertar(connection, {
-        pEmpId, pUsuId, pArticuloId, pTipoMovimiento, pBolsaEstado,
+        pEmpId, pUsuId, pBodegaId, pArticuloId, pTipoMovimiento, pBolsaEstado,
         pPropietarioId: propietarioId, pCantidad, pCostoUnitario: pCostoUnitario ?? null,
         pMotivo, pTipoOrigen, pOrigenId: pOrigenId ?? null, pObservaciones: pObservaciones ?? null
     });

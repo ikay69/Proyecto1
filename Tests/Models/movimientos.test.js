@@ -14,18 +14,29 @@ const crearArticuloDePrueba = async (connection, empId = 1) => {
     return { articuloId: insertResult.insertId, usuarioId: usuarioRows[0].Id };
 };
 
+// Bodegas.Nombre tiene UNIQUE (EmpresaId, Nombre): cada bodega de prueba usa un nombre unico.
+const crearBodegaDePrueba = async (connection, usuarioId, empId = 1) => {
+    const nombre = `BODEGA PRUEBA ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const [insertResult] = await connection.query(
+        `INSERT INTO Bodegas(EmpresaId, UsuarioIdCreador, Nombre) VALUES (?, ?, ?);`,
+        [empId, usuarioId, nombre]
+    );
+    return insertResult.insertId;
+};
+
 test('insertar guarda el movimiento y traerKardex lo devuelve con saldo corriente', async () => {
     await withRollback(async (connection) => {
         const { articuloId, usuarioId } = await crearArticuloDePrueba(connection);
+        const bodegaId = await crearBodegaDePrueba(connection, usuarioId);
 
         await Movimientos.insertar(connection, {
-            pEmpId: 1, pUsuId: usuarioId, pArticuloId: articuloId,
+            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pArticuloId: articuloId,
             pTipoMovimiento: 'ENTRADA', pBolsaEstado: 'DISPONIBLE', pPropietarioId: null,
             pCantidad: 10, pCostoUnitario: 50, pMotivo: 'AJUSTE', pTipoOrigen: 'AJUSTE',
             pOrigenId: null, pObservaciones: 'primera entrada'
         });
         await Movimientos.insertar(connection, {
-            pEmpId: 1, pUsuId: usuarioId, pArticuloId: articuloId,
+            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pArticuloId: articuloId,
             pTipoMovimiento: 'SALIDA', pBolsaEstado: 'DISPONIBLE', pPropietarioId: null,
             pCantidad: 3, pCostoUnitario: null, pMotivo: 'AJUSTE', pTipoOrigen: 'AJUSTE',
             pOrigenId: null, pObservaciones: 'ajuste de salida'
@@ -39,15 +50,17 @@ test('insertar guarda el movimiento y traerKardex lo devuelve con saldo corrient
         assert.equal(kardex.length, 2);
         assert.equal(Number(kardex[0].movSaldo), 10);
         assert.equal(Number(kardex[1].movSaldo), 7);
+        assert.equal(kardex[0].movBodegaId, bodegaId);
     });
 });
 
 test('traerPorOrigen filtra por TipoOrigen y OrigenId', async () => {
     await withRollback(async (connection) => {
         const { articuloId, usuarioId } = await crearArticuloDePrueba(connection);
+        const bodegaId = await crearBodegaDePrueba(connection, usuarioId);
 
         await Movimientos.insertar(connection, {
-            pEmpId: 1, pUsuId: usuarioId, pArticuloId: articuloId,
+            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pArticuloId: articuloId,
             pTipoMovimiento: 'ENTRADA', pBolsaEstado: 'DISPONIBLE', pPropietarioId: null,
             pCantidad: 5, pCostoUnitario: 20, pMotivo: 'PRODUCCION', pTipoOrigen: 'PRODUCCION',
             pOrigenId: 999, pObservaciones: null
@@ -59,5 +72,6 @@ test('traerPorOrigen filtra por TipoOrigen y OrigenId', async () => {
 
         assert.equal(movimientos.length, 1);
         assert.equal(movimientos[0].movArticuloId, articuloId);
+        assert.equal(movimientos[0].movBodegaId, bodegaId);
     });
 });

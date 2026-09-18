@@ -17,8 +17,18 @@ const generarSKUDePrueba = (prefijo = 'P') => {
     return `${prefijo}${tiempo}${azar}`;
 };
 
-// Siembra la materia prima y su bolsa DISPONIBLE escribiendo directo en las tablas, sin pasar
-// por registrarMovimientoTransaccional. Dos razones:
+// Bodegas.Nombre tiene UNIQUE (EmpresaId, Nombre): cada bodega de prueba usa un nombre unico.
+const crearBodegaDePrueba = async (usuarioId) => {
+    const nombre = `BODEGA PRUEBA ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const [insertResult] = await pool.query(
+        `INSERT INTO Bodegas(EmpresaId, UsuarioIdCreador, Nombre) VALUES (1, ?, ?);`,
+        [usuarioId, nombre]
+    );
+    return insertResult.insertId;
+};
+
+// Siembra la materia prima y su bolsa DISPONIBLE en la bodega indicada, escribiendo directo en
+// las tablas, sin pasar por registrarMovimientoTransaccional. Dos razones:
 //  - el unico movimiento que puede existir despues es el que genere la orden de produccion, asi
 //    las aserciones sobre Movimientos son exactas;
 //  - registrarMovimientoTransaccional bloquea una bolsa todavia inexistente (SELECT ... FOR
@@ -26,7 +36,7 @@ const generarSKUDePrueba = (prefijo = 'P') => {
 //    de prueba corriendo en paralelo ese patron produce deadlocks intermitentes de InnoDB.
 // Es el mismo enfoque que ya usa Tests/Helpers/inventarioTransacciones.test.js para sus pruebas
 // de camino confirmado.
-const sembrarArticuloConExistencia = async ({empId, usuarioId, productoId, cantidad, costo}) => {
+const sembrarArticuloConExistencia = async ({empId, usuarioId, productoId, bodegaId, cantidad, costo}) => {
     const conn = await pool.getConnection();
     try {
         await conn.beginTransaction();
@@ -37,7 +47,7 @@ const sembrarArticuloConExistencia = async ({empId, usuarioId, productoId, canti
         );
         const articuloId = insertResult.insertId;
         await Existencias.upsertCantidadYCosto(conn, {
-            pEmpId: empId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pEmpId: empId, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
             pPropietarioId: null, pDelta: cantidad, pCosto: costo
         });
         await conn.commit();
@@ -60,6 +70,11 @@ const limpiarArticulo = async (articuloId) => {
     await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [articuloId]);
 };
 
+const limpiarBodega = async (bodegaId) => {
+    if (!bodegaId) return;
+    await pool.query(`DELETE FROM Bodegas WHERE Id = ?;`, [bodegaId]);
+};
+
 const traerContexto = async () => {
     const [productoRows] = await pool.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
     const [usuarioRows] = await pool.query(`SELECT Id FROM Usuarios LIMIT 1;`);
@@ -68,11 +83,12 @@ const traerContexto = async () => {
 
 test('crearOrdenProduccion consume materia prima y produce un articulo nuevo con costo derivado', async () => {
     const { productoId, usuarioId } = await traerContexto();
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let materiaPrimaId, joyaId, ordenId;
     try {
         materiaPrimaId = await sembrarArticuloConExistencia({
-            empId: 1, usuarioId, productoId, cantidad: 10, costo: 100
+            empId: 1, usuarioId, productoId, bodegaId, cantidad: 10, costo: 100
         });
         joyaId = await Articulos.crear({
             pEmpId: 1, pUsuIdCrea: usuarioId, pProductoId: productoId,
@@ -80,7 +96,7 @@ test('crearOrdenProduccion consume materia prima y produce un articulo nuevo con
         });
 
         ordenId = await crearOrdenProduccion({
-            pEmpId: 1, pUsuId: usuarioId, pObservaciones: 'fundicion de prueba',
+            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: 'fundicion de prueba',
             consumos: [{ idArticulo: materiaPrimaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 4 }],
             producidos: [{ idArticulo: joyaId, Cantidad: 1, CostoUnitario: null }]
         });
@@ -88,10 +104,10 @@ test('crearOrdenProduccion consume materia prima y produce un articulo nuevo con
         const connVerif = await pool.getConnection();
         try {
             const bolsaMateriaPrima = await Existencias.traerBolsaBloqueada(connVerif, {
-                pEmpId: 1, pArticuloId: materiaPrimaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+                pEmpId: 1, pBodegaId: bodegaId, pArticuloId: materiaPrimaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
             });
             const bolsaJoya = await Existencias.traerBolsaBloqueada(connVerif, {
-                pEmpId: 1, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+                pEmpId: 1, pBodegaId: bodegaId, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
             });
 
             assert.equal(Number(bolsaMateriaPrima.Cantidad), 6);
@@ -103,24 +119,27 @@ test('crearOrdenProduccion consume materia prima y produce un articulo nuevo con
 
         const movimientosOrden = await Movimientos.traerPorOrigen({ pEmpId: 1, pTipoOrigen: 'PRODUCCION', pOrigenId: ordenId });
         assert.equal(movimientosOrden.length, 2);
-        // la salida de materia prima se costeo con el CostoUnitario vigente del articulo, no con
+        // la salida de materia prima se costeo con el CostoUnitario vigente de la bolsa, no con
         // un valor enviado por el llamador
         const salida = movimientosOrden.find(m => m.movTipo === 'SALIDA');
         assert.equal(Number(salida.movCosto), 100);
+        assert.equal(salida.movBodegaId, bodegaId);
     } finally {
         await limpiarArticulo(materiaPrimaId);
         await limpiarArticulo(joyaId);
         if (ordenId) await pool.query(`DELETE FROM OrdenesProduccion WHERE Id = ?;`, [ordenId]);
+        await limpiarBodega(bodegaId);
     }
 });
 
 test('crearOrdenProduccion respeta un costoUnitario explicito en el producido', async () => {
     const { productoId, usuarioId } = await traerContexto();
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let materiaPrimaId, joyaId, ordenId;
     try {
         materiaPrimaId = await sembrarArticuloConExistencia({
-            empId: 1, usuarioId, productoId, cantidad: 10, costo: 100
+            empId: 1, usuarioId, productoId, bodegaId, cantidad: 10, costo: 100
         });
         joyaId = await Articulos.crear({
             pEmpId: 1, pUsuIdCrea: usuarioId, pProductoId: productoId,
@@ -128,7 +147,7 @@ test('crearOrdenProduccion respeta un costoUnitario explicito en el producido', 
         });
 
         ordenId = await crearOrdenProduccion({
-            pEmpId: 1, pUsuId: usuarioId, pObservaciones: null,
+            pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: null,
             consumos: [{ idArticulo: materiaPrimaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 2 }],
             producidos: [{ idArticulo: joyaId, Cantidad: 1, CostoUnitario: 500 }]
         });
@@ -136,7 +155,7 @@ test('crearOrdenProduccion respeta un costoUnitario explicito en el producido', 
         const connVerif = await pool.getConnection();
         try {
             const bolsaJoya = await Existencias.traerBolsaBloqueada(connVerif, {
-                pEmpId: 1, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+                pEmpId: 1, pBodegaId: bodegaId, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
             });
             assert.equal(Number(bolsaJoya.CostoUnitario), 500);
         } finally {
@@ -146,6 +165,7 @@ test('crearOrdenProduccion respeta un costoUnitario explicito en el producido', 
         await limpiarArticulo(materiaPrimaId);
         await limpiarArticulo(joyaId);
         if (ordenId) await pool.query(`DELETE FROM OrdenesProduccion WHERE Id = ?;`, [ordenId]);
+        await limpiarBodega(bodegaId);
     }
 });
 
@@ -154,14 +174,15 @@ test('crearOrdenProduccion respeta un costoUnitario explicito en el producido', 
 // propia transaccion, la primera salida quedaria confirmada y la bolsa bajaria a 6.
 test('crearOrdenProduccion revierte toda la orden si un consumo posterior falla', async () => {
     const { productoId, usuarioId } = await traerContexto();
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let materiaPrimaId, materiaPrimaSinSaldoId, joyaId;
     try {
         materiaPrimaId = await sembrarArticuloConExistencia({
-            empId: 1, usuarioId, productoId, cantidad: 10, costo: 100
+            empId: 1, usuarioId, productoId, bodegaId, cantidad: 10, costo: 100
         });
         materiaPrimaSinSaldoId = await sembrarArticuloConExistencia({
-            empId: 1, usuarioId, productoId, cantidad: 1, costo: 50
+            empId: 1, usuarioId, productoId, bodegaId, cantidad: 1, costo: 50
         });
         joyaId = await Articulos.crear({
             pEmpId: 1, pUsuIdCrea: usuarioId, pProductoId: productoId,
@@ -172,7 +193,7 @@ test('crearOrdenProduccion revierte toda la orden si un consumo posterior falla'
 
         await assert.rejects(
             () => crearOrdenProduccion({
-                pEmpId: 1, pUsuId: usuarioId, pObservaciones: 'fundicion que falla',
+                pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: 'fundicion que falla',
                 consumos: [
                     { idArticulo: materiaPrimaId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 4 },
                     { idArticulo: materiaPrimaSinSaldoId, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 999 }
@@ -187,10 +208,10 @@ test('crearOrdenProduccion revierte toda la orden si un consumo posterior falla'
         const connVerif = await pool.getConnection();
         try {
             const bolsaMateriaPrima = await Existencias.traerBolsaBloqueada(connVerif, {
-                pEmpId: 1, pArticuloId: materiaPrimaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+                pEmpId: 1, pBodegaId: bodegaId, pArticuloId: materiaPrimaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
             });
             const bolsaJoya = await Existencias.traerBolsaBloqueada(connVerif, {
-                pEmpId: 1, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+                pEmpId: 1, pBodegaId: bodegaId, pArticuloId: joyaId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
             });
             const [movimientos] = await connVerif.query(
                 `SELECT Id FROM Movimientos WHERE ArticuloId IN (?,?,?);`,
@@ -213,26 +234,32 @@ test('crearOrdenProduccion revierte toda la orden si un consumo posterior falla'
         await limpiarArticulo(materiaPrimaId);
         await limpiarArticulo(materiaPrimaSinSaldoId);
         await limpiarArticulo(joyaId);
+        await limpiarBodega(bodegaId);
     }
 });
 
 test('crearOrdenProduccion rechaza una orden sin consumos o sin producidos', async () => {
     const { usuarioId } = await traerContexto();
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
-    await assert.rejects(
-        () => crearOrdenProduccion({
-            pEmpId: 1, pUsuId: usuarioId, pObservaciones: null,
-            consumos: [], producidos: [{ idArticulo: 1, Cantidad: 1, CostoUnitario: 10 }]
-        }),
-        /al menos un consumo/
-    );
+    try {
+        await assert.rejects(
+            () => crearOrdenProduccion({
+                pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: null,
+                consumos: [], producidos: [{ idArticulo: 1, Cantidad: 1, CostoUnitario: 10 }]
+            }),
+            /al menos un consumo/
+        );
 
-    await assert.rejects(
-        () => crearOrdenProduccion({
-            pEmpId: 1, pUsuId: usuarioId, pObservaciones: null,
-            consumos: [{ idArticulo: 1, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 1 }],
-            producidos: []
-        }),
-        /al menos un art/
-    );
+        await assert.rejects(
+            () => crearOrdenProduccion({
+                pEmpId: 1, pUsuId: usuarioId, pBodegaId: bodegaId, pObservaciones: null,
+                consumos: [{ idArticulo: 1, BolsaEstado: 'DISPONIBLE', idPropietario: null, Cantidad: 1 }],
+                producidos: []
+            }),
+            /al menos un art/
+        );
+    } finally {
+        await limpiarBodega(bodegaId);
+    }
 });

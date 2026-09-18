@@ -27,17 +27,30 @@ const crearArticuloDePrueba = async (connection, empId = 1) => {
     return insertResult.insertId;
 };
 
+// Bodegas.Nombre tiene UNIQUE (EmpresaId, Nombre): cada bodega de prueba usa un nombre unico.
+const crearBodegaDePrueba = async (connection, empId = 1) => {
+    const [usuarioRows] = await connection.query(`SELECT Id FROM Usuarios LIMIT 1;`);
+    const nombre = `BODEGA PRUEBA ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
+    const [insertResult] = await connection.query(
+        `INSERT INTO Bodegas(EmpresaId, UsuarioIdCreador, Nombre) VALUES (?, ?, ?);`,
+        [empId, usuarioRows[0].Id, nombre]
+    );
+    return insertResult.insertId;
+};
+
 test('upsertCantidad crea la bolsa si no existe', async () => {
     await withRollback(async (connection) => {
         const articuloId = await crearArticuloDePrueba(connection);
+        const bodegaId = await crearBodegaDePrueba(connection);
 
         await Existencias.upsertCantidad(connection, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
             pPropietarioId: null, pDelta: 10
         });
 
         const bolsa = await Existencias.traerBolsaBloqueada(connection, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
         });
 
         assert.equal(Number(bolsa.Cantidad), 10);
@@ -47,18 +60,19 @@ test('upsertCantidad crea la bolsa si no existe', async () => {
 test('upsertCantidad incrementa una bolsa existente', async () => {
     await withRollback(async (connection) => {
         const articuloId = await crearArticuloDePrueba(connection);
+        const bodegaId = await crearBodegaDePrueba(connection);
 
         await Existencias.upsertCantidad(connection, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
             pPropietarioId: null, pDelta: 10
         });
         await Existencias.upsertCantidad(connection, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
             pPropietarioId: null, pDelta: -4
         });
 
         const bolsa = await Existencias.traerBolsaBloqueada(connection, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
         });
 
         assert.equal(Number(bolsa.Cantidad), 6);
@@ -68,13 +82,14 @@ test('upsertCantidad incrementa una bolsa existente', async () => {
 test('dos bolsas del mismo articulo con propietarios NULL distintos no chocan (PropietarioIdClave)', async () => {
     await withRollback(async (connection) => {
         const articuloId = await crearArticuloDePrueba(connection);
+        const bodegaId = await crearBodegaDePrueba(connection);
 
         await Existencias.upsertCantidad(connection, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
             pPropietarioId: null, pDelta: 5
         });
         await Existencias.upsertCantidad(connection, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'RESERVADO',
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'RESERVADO',
             pPropietarioId: null, pDelta: 3
         });
 
@@ -88,12 +103,44 @@ test('dos bolsas del mismo articulo con propietarios NULL distintos no chocan (P
     });
 });
 
+// El costo/cantidad ahora vive por bodega: dos bodegas distintas para el mismo articulo y la
+// misma bolsa deben ser filas independientes (uq_existencias_bolsa incluye BodegaId).
+test('dos bolsas del mismo articulo en distintas bodegas no chocan', async () => {
+    await withRollback(async (connection) => {
+        const articuloId = await crearArticuloDePrueba(connection);
+        const bodegaAId = await crearBodegaDePrueba(connection);
+        const bodegaBId = await crearBodegaDePrueba(connection);
+
+        await Existencias.upsertCantidadYCosto(connection, {
+            pEmpId: 1, pBodegaId: bodegaAId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pPropietarioId: null, pDelta: 10, pCosto: 50
+        });
+        await Existencias.upsertCantidadYCosto(connection, {
+            pEmpId: 1, pBodegaId: bodegaBId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE',
+            pPropietarioId: null, pDelta: 4, pCosto: 90
+        });
+
+        const bolsaA = await Existencias.traerBolsaBloqueada(connection, {
+            pEmpId: 1, pBodegaId: bodegaAId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+        });
+        const bolsaB = await Existencias.traerBolsaBloqueada(connection, {
+            pEmpId: 1, pBodegaId: bodegaBId, pArticuloId: articuloId, pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+        });
+
+        assert.equal(Number(bolsaA.Cantidad), 10);
+        assert.equal(Number(bolsaA.CostoUnitario), 50);
+        assert.equal(Number(bolsaB.Cantidad), 4);
+        assert.equal(Number(bolsaB.CostoUnitario), 90);
+    });
+});
+
 test('traerBolsaBloqueada retorna null si la bolsa no existe', async () => {
     await withRollback(async (connection) => {
         const articuloId = await crearArticuloDePrueba(connection);
+        const bodegaId = await crearBodegaDePrueba(connection);
 
         const bolsa = await Existencias.traerBolsaBloqueada(connection, {
-            pEmpId: 1, pArticuloId: articuloId, pBolsaEstado: 'EN_REPARACION', pPropietarioId: null
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId, pBolsaEstado: 'EN_REPARACION', pPropietarioId: null
         });
 
         assert.equal(bolsa, null);

@@ -11,6 +11,16 @@ const obtenerProductoYUsuarioDePrueba = async () => {
     return { productoId: productoRows[0].Id, usuarioId: usuarioRows[0].Id };
 };
 
+// Bodegas.Nombre tiene UNIQUE (EmpresaId, Nombre): cada bodega de prueba usa un nombre unico.
+const crearBodegaDePrueba = async (usuarioId) => {
+    const nombre = `BODEGA PRUEBA ${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const [insertResult] = await pool.query(
+        `INSERT INTO Bodegas(EmpresaId, UsuarioIdCreador, Nombre) VALUES (1, ?, ?);`,
+        [usuarioId, nombre]
+    );
+    return insertResult.insertId;
+};
+
 test('crear genera un CodigoSKU basado en el Id autogenerado', async () => {
     const { productoId, usuarioId } = await obtenerProductoYUsuarioDePrueba();
     let articuloId;
@@ -90,18 +100,20 @@ test('editar reemplaza el set de propiedades', async () => {
     }
 });
 
-test('traerVendibles solo devuelve articulos Vender=true, Estado=true, con existencia DISPONIBLE > 0', async () => {
+test('traerVendibles solo devuelve articulos Vender=true, Estado=true, con existencia DISPONIBLE > 0 en la bodega consultada', async () => {
     const { productoId, usuarioId } = await obtenerProductoYUsuarioDePrueba();
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
+    const otraBodegaId = await crearBodegaDePrueba(usuarioId);
 
-    let idVendible, idNoVendible, idSinExistencia;
+    let idVendible, idNoVendible, idSinExistencia, idOtraBodega;
     try {
         idVendible = await Articulos.crear({
             pEmpId:1, pUsuIdCrea:usuarioId, pProductoId:productoId,
             pNombre:'ARTICULO VENDIBLE DE PRUEBA', pDescripcion:null, pPrecioVentaUnitario:100, pPropiedades:[]
         });
         await pool.query(
-            `INSERT INTO Existencias(EmpresaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, 'DISPONIBLE', 5);`,
-            [idVendible]
+            `INSERT INTO Existencias(EmpresaId, BodegaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, ?, 'DISPONIBLE', 5);`,
+            [bodegaId, idVendible]
         );
 
         idNoVendible = await Articulos.crear({
@@ -114,8 +126,8 @@ test('traerVendibles solo devuelve articulos Vender=true, Estado=true, con exist
             pVender:false, pEstado:true, pPropiedades:[]
         });
         await pool.query(
-            `INSERT INTO Existencias(EmpresaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, 'DISPONIBLE', 5);`,
-            [idNoVendible]
+            `INSERT INTO Existencias(EmpresaId, BodegaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, ?, 'DISPONIBLE', 5);`,
+            [bodegaId, idNoVendible]
         );
 
         idSinExistencia = await Articulos.crear({
@@ -123,24 +135,37 @@ test('traerVendibles solo devuelve articulos Vender=true, Estado=true, con exist
             pNombre:'ARTICULO SIN EXISTENCIA DE PRUEBA', pDescripcion:null, pPrecioVentaUnitario:100, pPropiedades:[]
         });
 
-        const resultado = await Articulos.traerVendibles({pEmpId:1, pCampoOrden:'Nombre', pOrden:'ASC', pOffset:0, pTexto:'%%'});
+        // existencia DISPONIBLE real, pero en OTRA bodega: no debe aparecer al consultar bodegaId
+        idOtraBodega = await Articulos.crear({
+            pEmpId:1, pUsuIdCrea:usuarioId, pProductoId:productoId,
+            pNombre:'ARTICULO EN OTRA BODEGA DE PRUEBA', pDescripcion:null, pPrecioVentaUnitario:100, pPropiedades:[]
+        });
+        await pool.query(
+            `INSERT INTO Existencias(EmpresaId, BodegaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, ?, 'DISPONIBLE', 5);`,
+            [otraBodegaId, idOtraBodega]
+        );
+
+        const resultado = await Articulos.traerVendibles({pEmpId:1, pBodegaId:bodegaId, pCampoOrden:'Nombre', pOrden:'ASC', pOffset:0, pTexto:'%%'});
         const ids = resultado.map(r => r.artId);
 
         assert.ok(ids.includes(idVendible));
         assert.ok(!ids.includes(idNoVendible));
         assert.ok(!ids.includes(idSinExistencia));
+        assert.ok(!ids.includes(idOtraBodega));
     } finally {
-        for (const id of [idVendible, idNoVendible, idSinExistencia]) {
+        for (const id of [idVendible, idNoVendible, idSinExistencia, idOtraBodega]) {
             if (id) {
                 await pool.query(`DELETE FROM Existencias WHERE ArticuloId = ?;`, [id]);
                 await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [id]);
             }
         }
+        await pool.query(`DELETE FROM Bodegas WHERE Id IN (?,?);`, [bodegaId, otraBodegaId]);
     }
 });
 
 test('contarVendiblesFiltro cuenta lo mismo que traerVendibles devuelve', async () => {
     const { productoId, usuarioId } = await obtenerProductoYUsuarioDePrueba();
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
 
     let idVendible;
     try {
@@ -149,16 +174,17 @@ test('contarVendiblesFiltro cuenta lo mismo que traerVendibles devuelve', async 
             pNombre:'ARTICULO VENDIBLE PARA CONTEO', pDescripcion:null, pPrecioVentaUnitario:100, pPropiedades:[]
         });
         await pool.query(
-            `INSERT INTO Existencias(EmpresaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, 'DISPONIBLE', 3);`,
-            [idVendible]
+            `INSERT INTO Existencias(EmpresaId, BodegaId, ArticuloId, BolsaEstado, Cantidad) VALUES (1, ?, ?, 'DISPONIBLE', 3);`,
+            [bodegaId, idVendible]
         );
 
-        const total = await Articulos.contarVendiblesFiltro({pEmpId:1, pCampoOrden:'Nombre', pTexto:'%VENDIBLE PARA CONTEO%'});
+        const total = await Articulos.contarVendiblesFiltro({pEmpId:1, pBodegaId:bodegaId, pCampoOrden:'Nombre', pTexto:'%VENDIBLE PARA CONTEO%'});
         assert.equal(total, 1);
     } finally {
         if (idVendible) {
             await pool.query(`DELETE FROM Existencias WHERE ArticuloId = ?;`, [idVendible]);
             await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [idVendible]);
         }
+        await pool.query(`DELETE FROM Bodegas WHERE Id = ?;`, [bodegaId]);
     }
 });

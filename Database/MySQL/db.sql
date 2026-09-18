@@ -167,6 +167,19 @@ CREATE TABLE Productos(
     CONSTRAINT fk_productos_tipoproducto FOREIGN KEY (TipoProductoId) REFERENCES TiposProductos(Id) 
 );
 
+CREATE TABLE Bodegas(
+    Id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    EmpresaId           BIGINT UNSIGNED NOT NULL,
+    UsuarioIdCreador    BIGINT UNSIGNED NOT NULL,
+    Nombre              VARCHAR(150) NOT NULL,
+    Estado              BOOLEAN NOT NULL DEFAULT TRUE,
+    FechaCreacion       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_bodegas_nombre UNIQUE (EmpresaId, Nombre),
+    CONSTRAINT fk_bodegas_empresa FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_bodegas_usuario FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id)
+);
+
 CREATE TABLE Articulos(
     Id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     EmpresaId           BIGINT UNSIGNED NOT NULL,
@@ -204,6 +217,7 @@ CREATE TABLE ArticuloPropiedades(
 CREATE TABLE Existencias(
     Id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     EmpresaId           BIGINT UNSIGNED NOT NULL,
+    BodegaId            BIGINT UNSIGNED NOT NULL,
     ArticuloId          BIGINT UNSIGNED NOT NULL,
     BolsaEstado         VARCHAR(30) NOT NULL,
     PropietarioId       BIGINT UNSIGNED NULL,
@@ -216,8 +230,9 @@ CREATE TABLE Existencias(
         'DISPONIBLE', 'RESERVADO', 'PRESTADO_A_TALLER',
         'RECIBIDO_DE_TALLER', 'EN_GARANTIA_EMPENO', 'EN_REPARACION'
     )),
-    CONSTRAINT uq_existencias_bolsa UNIQUE (EmpresaId, ArticuloId, BolsaEstado, PropietarioIdClave),
+    CONSTRAINT uq_existencias_bolsa UNIQUE (EmpresaId, BodegaId, ArticuloId, BolsaEstado, PropietarioIdClave),
     CONSTRAINT fk_existencias_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_existencias_bodega   FOREIGN KEY (BodegaId) REFERENCES Bodegas(Id),
     CONSTRAINT fk_existencias_articulo FOREIGN KEY (ArticuloId) REFERENCES Articulos(Id),
     CONSTRAINT fk_existencias_tercero  FOREIGN KEY (PropietarioId) REFERENCES Terceros(Id)
 );
@@ -228,6 +243,7 @@ CREATE TABLE Movimientos(
     UsuarioIdCreador    BIGINT UNSIGNED NOT NULL,
     FechaMovimiento     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
+    BodegaId            BIGINT UNSIGNED NOT NULL,
     ArticuloId          BIGINT UNSIGNED NOT NULL,
     TipoMovimiento      VARCHAR(10) NOT NULL,
     BolsaEstado         VARCHAR(30) NOT NULL,
@@ -256,6 +272,7 @@ CREATE TABLE Movimientos(
 
     CONSTRAINT fk_movimientos_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
     CONSTRAINT fk_movimientos_usuario  FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id),
+    CONSTRAINT fk_movimientos_bodega   FOREIGN KEY (BodegaId) REFERENCES Bodegas(Id),
     CONSTRAINT fk_movimientos_articulo FOREIGN KEY (ArticuloId) REFERENCES Articulos(Id),
     CONSTRAINT fk_movimientos_tercero  FOREIGN KEY (PropietarioId) REFERENCES Terceros(Id),
 

@@ -2,6 +2,7 @@ import Articulos from '../Models/articulos.js';
 import Movimientos from '../Models/movimientos.js';
 import Terceros from '../Models/terceros.js';
 import { registrarMovimientoTransaccional } from '../Helpers/inventarioTransacciones.js';
+import { BODEGA_PREDETERMINADA } from '../Helpers/bodegaPredeterminada.js';
 
 const SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -49,6 +50,7 @@ const movimientosControllers = {
             const movimientoId = await registrarMovimientoTransaccional({
                 pEmpId: idEmpresa,
                 pUsuId: UsuIdLogin,
+                pBodegaId: BODEGA_PREDETERMINADA,
                 pArticuloId: idArticulo,
                 pTipoMovimiento: TipoMovimiento,
                 pBolsaEstado: BolsaEstado,

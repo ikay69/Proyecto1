@@ -5,6 +5,7 @@ import Existencias from '../Models/existencias.js';
 import Ventas from '../Models/ventas.js';
 import VentaDetalles from '../Models/ventaDetalles.js';
 import { crearVentaContado } from '../Helpers/ventaService.js';
+import { BODEGA_PREDETERMINADA } from '../Helpers/bodegaPredeterminada.js';
 
 const ventasControllers = {
     crear: async (req,res) => {
@@ -44,7 +45,8 @@ const ventasControllers = {
                     return res.status(401).json({msg:`Articulo ${item.idArticulo} no disponible para la venta`});
                 }
                 const bolsaDisponible = await Existencias.traerBolsa({
-                    pEmpId:idEmpresa, pArticuloId:item.idArticulo, pBolsaEstado:'DISPONIBLE', pPropietarioId:null
+                    pEmpId:idEmpresa, pBodegaId:BODEGA_PREDETERMINADA, pArticuloId:item.idArticulo,
+                    pBolsaEstado:'DISPONIBLE', pPropietarioId:null
                 });
                 articulosResueltos.push({
                     idArticulo: item.idArticulo,
@@ -63,7 +65,7 @@ const ventasControllers = {
             const terceroNombreCompleto = [tercero.Nombre, tercero.Apellidos].filter(Boolean).join(' ').trim().slice(0, 300);
 
             const ventaId = await crearVentaContado({
-                pEmpId: idEmpresa, pUsuId: UsuIdLogin, pTerceroId: idTercero,
+                pEmpId: idEmpresa, pUsuId: UsuIdLogin, pBodegaId: BODEGA_PREDETERMINADA, pTerceroId: idTercero,
                 pTerceroTipoDoc: tipoDocAbreviatura,
                 pTerceroNumeroDoc: tercero.NumeroDocumento,
                 pTerceroNombre: terceroNombreCompleto,

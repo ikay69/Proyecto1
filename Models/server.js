@@ -13,6 +13,7 @@ import tercero from '../Routes/terceros.js';
 import propiedad from '../Routes/propiedades.js';
 import tiposProducto from '../Routes/tiposProducto.js';
 import producto from '../Routes/productos.js'
+import bodega from '../Routes/bodegas.js';
 import articulo from '../Routes/articulos.js';
 import existencia from '../Routes/existencias.js';
 import movimiento from '../Routes/movimientos.js';
@@ -77,6 +78,7 @@ class Server{
         this.app.use('/api/propiedad',propiedad);
         this.app.use('/api/tiposproducto',tiposProducto);
         this.app.use('/api/producto',producto);
+        this.app.use('/api/bodega',bodega);
         this.app.use('/api/articulo',articulo);
         this.app.use('/api/existencia',existencia);
         this.app.use('/api/movimiento',movimiento);

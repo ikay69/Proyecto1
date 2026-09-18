@@ -3,6 +3,7 @@ import OrdenesProduccion from '../Models/ordenesProduccion.js';
 import Movimientos from '../Models/movimientos.js';
 import Terceros from '../Models/terceros.js';
 import { crearOrdenProduccion } from '../Helpers/produccionService.js';
+import { BODEGA_PREDETERMINADA } from '../Helpers/bodegaPredeterminada.js';
 
 const ordenesProduccionControllers = {
     crear: async (req,res) => {
@@ -32,8 +33,8 @@ const ordenesProduccionControllers = {
             }
 
             const ordenId = await crearOrdenProduccion({
-                pEmpId: idEmpresa, pUsuId: UsuIdLogin, pObservaciones: Observaciones ?? null,
-                consumos, producidos
+                pEmpId: idEmpresa, pUsuId: UsuIdLogin, pBodegaId: BODEGA_PREDETERMINADA,
+                pObservaciones: Observaciones ?? null, consumos, producidos
             });
 
             if (ordenId > 0) {

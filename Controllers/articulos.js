@@ -3,6 +3,7 @@ import ArticuloPropiedades from '../Models/articuloPropiedades.js';
 import Productos from '../Models/productos.js';
 import Propiedades from '../Models/propiedades.js';
 import Existencias from '../Models/existencias.js';
+import { BODEGA_PREDETERMINADA } from '../Helpers/bodegaPredeterminada.js';
 
 //el nombre de columna nunca sale del body: se traduce aqui a un valor fijo, porque los
 //Models lo interpolan directamente en el ORDER BY / LIKE
@@ -156,8 +157,9 @@ const articulosControllers = {
 
             await Existencias.editarCosto({
                 pEmpId: idEmpresa,
+                pBodegaId: BODEGA_PREDETERMINADA,
                 pArticuloId: idArticulo,
-                pBolsaEstado: 'DISPONIBLE', 
+                pBolsaEstado: 'DISPONIBLE',
                 pPropietarioId: null,
                 pCosto: Number(nuevoCosto)
             });
@@ -223,12 +225,12 @@ const articulosControllers = {
             const vTextoFiltro = normalizarTextoFiltro(campoOrdenar, textoFiltro);
 
             let vPagina = Number(pagina);
-            const cantArticulos = await Articulos.contarVendiblesFiltro({pEmpId:idEmpresa,pCampoOrden:vCampoOrdenar,pTexto:vTextoFiltro});
+            const cantArticulos = await Articulos.contarVendiblesFiltro({pEmpId:idEmpresa,pBodegaId:BODEGA_PREDETERMINADA,pCampoOrden:vCampoOrdenar,pTexto:vTextoFiltro});
             const maxPagina = Math.max(1, Math.ceil(cantArticulos/50));
             vPagina = Math.min(Math.max(vPagina,1), maxPagina);
             const vOffset = (vPagina - 1) * 50;
 
-            const articulos = await Articulos.traerVendibles({pEmpId:idEmpresa,pCampoOrden:vCampoOrdenar,pOrden:vOrden,pOffset:vOffset,pTexto:vTextoFiltro});
+            const articulos = await Articulos.traerVendibles({pEmpId:idEmpresa,pBodegaId:BODEGA_PREDETERMINADA,pCampoOrden:vCampoOrdenar,pOrden:vOrden,pOffset:vOffset,pTexto:vTextoFiltro});
 
             return res.status(200).json({cantData:cantArticulos, data:articulos});
         } catch (error) {

@@ -1,13 +1,13 @@
 import { pool } from '../Database/config.js';
 
 const Movimientos = {
-    async insertar(connection, {pEmpId,pUsuId,pArticuloId,pTipoMovimiento,pBolsaEstado,pPropietarioId,pCantidad,pCostoUnitario,pMotivo,pTipoOrigen,pOrigenId,pObservaciones}){
+    async insertar(connection, {pEmpId,pUsuId,pBodegaId,pArticuloId,pTipoMovimiento,pBolsaEstado,pPropietarioId,pCantidad,pCostoUnitario,pMotivo,pTipoOrigen,pOrigenId,pObservaciones}){
         const [rows] = await connection.query(
             `INSERT INTO Movimientos(
-                EmpresaId, UsuarioIdCreador, ArticuloId, TipoMovimiento, BolsaEstado,
+                EmpresaId, UsuarioIdCreador, BodegaId, ArticuloId, TipoMovimiento, BolsaEstado,
                 PropietarioId, Cantidad, CostoUnitario, Motivo, TipoOrigen, OrigenId, Observaciones)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
-            [pEmpId,pUsuId,pArticuloId,pTipoMovimiento,pBolsaEstado,pPropietarioId,pCantidad,pCostoUnitario,pMotivo,pTipoOrigen,pOrigenId,pObservaciones]
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            [pEmpId,pUsuId,pBodegaId,pArticuloId,pTipoMovimiento,pBolsaEstado,pPropietarioId,pCantidad,pCostoUnitario,pMotivo,pTipoOrigen,pOrigenId,pObservaciones]
         );
         return rows.insertId;
     },
@@ -17,6 +17,7 @@ const Movimientos = {
             `SELECT * FROM (
                 SELECT
                     m.Id AS movId, m.FechaMovimiento AS movFecha, m.TipoMovimiento AS movTipo,
+                    m.BodegaId AS movBodegaId, bo.Nombre AS movBodegaNombre,
                     m.BolsaEstado AS movBolsa, m.PropietarioId AS movPropietarioId,
                     t.Nombre AS movPropietarioNombre, m.Cantidad AS movCantidad,
                     m.CostoUnitario AS movCosto, m.Motivo AS movMotivo,
@@ -25,6 +26,7 @@ const Movimientos = {
                     SUM(CASE WHEN m.TipoMovimiento = 'SALIDA' THEN -m.Cantidad ELSE m.Cantidad END)
                         OVER (ORDER BY m.FechaMovimiento ASC, m.Id ASC) AS movSaldo
                 FROM Movimientos m
+                    LEFT JOIN Bodegas bo ON bo.Id = m.BodegaId
                     LEFT JOIN Terceros t ON t.Id = m.PropietarioId
                     LEFT JOIN Usuarios u ON u.Id = m.UsuarioIdCreador
                 WHERE m.EmpresaId = ? AND m.ArticuloId = ?
@@ -51,7 +53,7 @@ const Movimientos = {
         const [rows] = await connWrapper.query(
             `SELECT
                 m.Id AS movId, m.ArticuloId AS movArticuloId, a.Nombre AS movArticuloNombre,
-                m.TipoMovimiento AS movTipo, m.BolsaEstado AS movBolsa,
+                m.BodegaId AS movBodegaId, m.TipoMovimiento AS movTipo, m.BolsaEstado AS movBolsa,
                 m.Cantidad AS movCantidad, m.CostoUnitario AS movCosto
             FROM Movimientos m
                 LEFT JOIN Articulos a ON a.Id = m.ArticuloId

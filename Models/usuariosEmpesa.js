@@ -24,15 +24,15 @@ const UsuariosEmpresa = {
 
     async usuariosDeEmpresa({pEmpresaId}){
         const [rows] = await pool.query(
-            `SELECT u.Id,
-                u.Nombre,
-                u.Apellidos,
-                u.userName,
-                u.Estado,
-                u.Rol,
-                u.FechaCreacion
+            `SELECT 
+                u.Id                AS usuMioId,
+                u.userName          AS usuMioUsuario,
+                CONCAT(u.Nombres, ' ', u.Apellidos)            AS usuMioNombre,
+                u.Estado            AS usuMioEstado,
+                u.Rol               AS usuMioRol,
+                u.FechaCreacion     AS usuMioFecCreacion
             FROM Usuarios u
-            INNER JOIN UsuariosEmpresa ue ON u.Id = ue.UsuariosId
+            INNER JOIN UsuariosEmpresa ue ON u.Id = ue.UsuarioId
             WHERE ue.EmpresaId = ?`,
             [pEmpresaId]
         );

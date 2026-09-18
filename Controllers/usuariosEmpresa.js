@@ -72,6 +72,20 @@ const usuariosEmpresaControllers = {
         } catch (error) {
             return res.status(500).json({msg:error})
         }
+    },
+
+    usuariosSinMiEmpresa:async(req,res)=>{
+        try {
+            const {idEmpresa} = req.body; 
+            
+            
+            const usuarios = await UsuariosEmpresa.usuariosDeEmpresa({pEmpresaId:idEmpresa});
+
+            return res.status(200).json({data:usuarios});
+        } catch (error) {
+            res.status(400).json({ msg: error.message || 'Error interno del servidor'});
+        }
+        
     }
 }
 

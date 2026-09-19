@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { pool } from '../../Database/config.js';
 import Articulos from '../../Models/articulos.js';
 import ArticuloPropiedades from '../../Models/articuloPropiedades.js';
+import { withRollback } from '../dbTestUtils.js';
 
 const obtenerProductoYUsuarioDePrueba = async () => {
     const [productoRows] = await pool.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
@@ -186,5 +187,86 @@ test('contarVendiblesFiltro cuenta lo mismo que traerVendibles devuelve', async 
             await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [idVendible]);
         }
         await pool.query(`DELETE FROM Bodegas WHERE Id = ?;`, [bodegaId]);
+    }
+});
+
+test('crearConConexion participa de la transaccion del llamador y se revierte con ella', async () => {
+    let articuloId = null;
+
+    await withRollback(async (connection) => {
+        const [productoRows] = await connection.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
+        const [usuarioRows] = await connection.query(`SELECT Id FROM Usuarios LIMIT 1;`);
+
+        articuloId = await Articulos.crearConConexion(connection, {
+            pEmpId: 1,
+            pUsuIdCrea: usuarioRows[0].Id,
+            pProductoId: productoRows[0].Id,
+            pNombre: 'ARTICULO TRANSACCIONAL DE PRUEBA',
+            pDescripcion: null,
+            pPrecioVentaUnitario: null,
+            pVender: false,
+            pPropiedades: []
+        });
+
+        assert.ok(articuloId > 0);
+
+        //dentro de la transaccion el articulo SI se ve
+        const [dentro] = await connection.query(`SELECT Id FROM Articulos WHERE Id = ?;`, [articuloId]);
+        assert.equal(dentro.length, 1);
+    });
+
+    //withRollback ya revirtio: el articulo no debe existir fuera de la transaccion
+    const [fuera] = await pool.query(`SELECT Id FROM Articulos WHERE Id = ?;`, [articuloId]);
+    assert.equal(fuera.length, 0);
+});
+
+test('crearConConexion persiste Vender en false y el SKU definitivo', async () => {
+    await withRollback(async (connection) => {
+        const [productoRows] = await connection.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
+        const [usuarioRows] = await connection.query(`SELECT Id FROM Usuarios LIMIT 1;`);
+
+        const articuloId = await Articulos.crearConConexion(connection, {
+            pEmpId: 1,
+            pUsuIdCrea: usuarioRows[0].Id,
+            pProductoId: productoRows[0].Id,
+            pNombre: 'ARTICULO SIN PRECIO DE PRUEBA',
+            pDescripcion: null,
+            pPrecioVentaUnitario: null,
+            pVender: false,
+            pPropiedades: []
+        });
+
+        const [rows] = await connection.query(
+            `SELECT CodigoSKU, PrecioVentaUnitario, Vender FROM Articulos WHERE Id = ?;`, [articuloId]
+        );
+        assert.equal(rows[0].CodigoSKU, `ART${String(articuloId).padStart(8, '0')}`);
+        assert.equal(rows[0].PrecioVentaUnitario, null);
+        assert.equal(Number(rows[0].Vender), 0);
+    });
+});
+
+test('crear sin pVender sigue dejando el articulo vendible, como antes del refactor', async () => {
+    let articuloId = null;
+    try {
+        const [productoRows] = await pool.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
+        const [usuarioRows] = await pool.query(`SELECT Id FROM Usuarios LIMIT 1;`);
+
+        articuloId = await Articulos.crear({
+            pEmpId: 1,
+            pUsuIdCrea: usuarioRows[0].Id,
+            pProductoId: productoRows[0].Id,
+            pNombre: 'ARTICULO VENDIBLE DE PRUEBA',
+            pDescripcion: null,
+            pPrecioVentaUnitario: 1000,
+            pPropiedades: []
+        });
+
+        const [rows] = await pool.query(`SELECT Vender FROM Articulos WHERE Id = ?;`, [articuloId]);
+        assert.equal(Number(rows[0].Vender), 1);
+    } finally {
+        if (articuloId) {
+            await pool.query(`DELETE FROM ArticuloPropiedades WHERE ArticuloId = ?;`, [articuloId]);
+            await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [articuloId]);
+        }
     }
 });

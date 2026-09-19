@@ -12,32 +12,47 @@ const generarSkuTemporal = () => {
 };
 
 const Articulos = {
-    //crea el articulo y sus propiedades en una sola transaccion. El SKU definitivo depende
-    //del Id autogenerado, por eso se inserta con un placeholder y se actualiza enseguida.
-    async crear({pEmpId,pUsuIdCrea,pProductoId,pNombre,pDescripcion,pPrecioVentaUnitario,pPropiedades}){
+    //crea el articulo y sus propiedades usando la conexion que le pasa el llamador. NO abre
+    //transaccion propia: asi la creacion puede formar parte de una transaccion mas grande
+    //(p.ej. Helpers/compraService.js, donde un articulo que se da de alta al comprarlo debe
+    //revertirse junto con la compra si esta falla). Mismo patron que
+    //registrarMovimiento/registrarMovimientoTransaccional en Helpers/inventarioTransacciones.js.
+    //El SKU definitivo depende del Id autogenerado, por eso se inserta con un placeholder y se
+    //actualiza enseguida.
+    async crearConConexion(connection, {
+        pEmpId, pUsuIdCrea, pProductoId, pNombre, pDescripcion, pPrecioVentaUnitario, pVender, pPropiedades
+    }){
+        const skuTemporal = generarSkuTemporal();
+
+        const [insertResult] = await connection.query(
+            `INSERT INTO Articulos(
+                EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU,
+                Nombre, Descripcion, PrecioVentaUnitario, Vender)
+            VALUES(?,?,?,?,?,?,?,?)`,
+            [pEmpId,pUsuIdCrea,pProductoId,skuTemporal,pNombre,pDescripcion,pPrecioVentaUnitario, pVender ?? true]
+        );
+
+        const nuevoId = insertResult.insertId;
+        const codigoSku = `ART${String(nuevoId).padStart(8,'0')}`;
+
+        await connection.query(`UPDATE Articulos SET CodigoSKU = ? WHERE Id = ?`, [codigoSku, nuevoId]);
+
+        await ArticuloPropiedades.reemplazarValores(connection, {
+            pEmpId, pArticuloId: nuevoId, propiedades: pPropiedades
+        });
+
+        return nuevoId;
+    },
+
+    //envoltura para el alta suelta de un articulo (ruta /newarticulo): abre y cierra su propia
+    //transaccion. Firma sin cambios respecto de antes del refactor; `pVender` es opcional y
+    //por omision el articulo queda vendible, que era el comportamiento previo (la columna
+    //Vender es NOT NULL DEFAULT TRUE y el INSERT no la incluia).
+    async crear(datos){
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
-
-            const skuTemporal = generarSkuTemporal();
-
-            const [insertResult] = await connection.query(
-                `INSERT INTO Articulos(
-                    EmpresaId, UsuarioIdCreador, ProductoId, CodigoSKU,
-                    Nombre, Descripcion, PrecioVentaUnitario)
-                VALUES(?,?,?,?,?,?,?)`,
-                [pEmpId,pUsuIdCrea,pProductoId,skuTemporal,pNombre,pDescripcion,pPrecioVentaUnitario]
-            );
-
-            const nuevoId = insertResult.insertId;
-            const codigoSku = `ART${String(nuevoId).padStart(8,'0')}`;
-
-            await connection.query(`UPDATE Articulos SET CodigoSKU = ? WHERE Id = ?`, [codigoSku, nuevoId]);
-
-            await ArticuloPropiedades.reemplazarValores(connection, {
-                pEmpId, pArticuloId: nuevoId, propiedades: pPropiedades
-            });
-
+            const nuevoId = await Articulos.crearConConexion(connection, datos);
             await connection.commit();
             return nuevoId;
         } catch (error) {

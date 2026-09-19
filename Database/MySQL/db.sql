@@ -343,3 +343,59 @@ CREATE TABLE VentaDetalles(
     CONSTRAINT fk_ventadetalle_bodega    FOREIGN KEY (BodegaId) REFERENCES Bodegas(Id),
     CONSTRAINT fk_ventadetalle_articulo  FOREIGN KEY (ArticuloId) REFERENCES Articulos(Id)
 );
+
+CREATE TABLE Compras(
+    Id                      BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    EmpresaId               BIGINT UNSIGNED NOT NULL,
+    UsuarioIdCreador        BIGINT UNSIGNED NOT NULL,
+    Estado                  BOOLEAN NOT NULL DEFAULT TRUE,
+    FechaCreacion           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    TerceroId               BIGINT UNSIGNED NOT NULL,
+    TerceroTipoDoc          VARCHAR(10) NULL,
+    TerceroNumeroDoc        VARCHAR(50) NULL,
+    TerceroNombre           VARCHAR(300) NOT NULL,
+
+    NumeroDocumentoSoporte  VARCHAR(50) NULL,
+
+    TipoCompra              VARCHAR(20) NOT NULL,
+
+    ValorSubtotal           DECIMAL(12,2) NOT NULL,
+    ValorDescuento          DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ValorCancelado          DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ValorSaldo              DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ValorEfectivo           DECIMAL(12,2) NOT NULL DEFAULT 0,
+    ValorTransaccion        DECIMAL(12,2) NOT NULL DEFAULT 0,
+    FechaCompromiso         TIMESTAMP NULL,
+
+    NumeroCuotas            INT UNSIGNED NULL,
+    ValorCuota              DECIMAL(12,2) NULL,
+
+    MotivoAnulacion         VARCHAR(300) NULL,
+
+    CONSTRAINT chk_compras_tipocompra CHECK (TipoCompra IN ('CONTADO','POR_ABONO','CREDITO')),
+    CONSTRAINT fk_compras_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_compras_usuario  FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id),
+    CONSTRAINT fk_compras_tercero  FOREIGN KEY (TerceroId) REFERENCES Terceros(Id),
+
+    INDEX idx_compras_listado (EmpresaId, FechaCreacion)
+);
+
+CREATE TABLE CompraDetalles(
+    Id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    EmpresaId       BIGINT UNSIGNED NOT NULL,
+    CompraId        BIGINT UNSIGNED NOT NULL,
+
+    BodegaId        BIGINT UNSIGNED NOT NULL,
+    ArticuloId      BIGINT UNSIGNED NOT NULL,
+    ArticuloNombre  VARCHAR(150) NOT NULL,
+
+    Cantidad        DECIMAL(12,2) NOT NULL,
+    CostoUnidad     DECIMAL(12,2) NOT NULL,
+
+    CONSTRAINT uq_compradetalle_articulo UNIQUE (EmpresaId, CompraId, ArticuloId, BodegaId),
+    CONSTRAINT fk_compradetalle_empresa   FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_compradetalle_compra    FOREIGN KEY (CompraId) REFERENCES Compras(Id),
+    CONSTRAINT fk_compradetalle_bodega    FOREIGN KEY (BodegaId) REFERENCES Bodegas(Id),
+    CONSTRAINT fk_compradetalle_articulo  FOREIGN KEY (ArticuloId) REFERENCES Articulos(Id)
+);

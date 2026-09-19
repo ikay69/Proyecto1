@@ -22,13 +22,13 @@ const ventasControllers = {
             }
 
             const tercero = await Terceros.traerPorId({pId:idTercero, pEmpId:idEmpresa});
-            if (!tercero || !tercero.Estado) {
+            if (!tercero || !tercero.terEstado) {
                 return res.status(401).json({msg:'Tercero inválido'});
             }
 
             let tipoDocAbreviatura = null;
-            if (tercero.TipoDocumento !== null && tercero.TipoDocumento !== undefined) {
-                const tipoDoc = await TiposDocumento.traerPorId({pId:tercero.TipoDocumento, pEmpId:idEmpresa});
+            if (tercero.terTipDocId !== null && tercero.terTipDocId !== undefined) {
+                const tipoDoc = await TiposDocumento.traerPorId({pId:tercero.terTipDocId, pEmpId:idEmpresa});
                 tipoDocAbreviatura = tipoDoc ? tipoDoc.tipDocAbreviatura : null;
             }
 
@@ -72,12 +72,12 @@ const ventasControllers = {
             //grabaria el literal "NOMBRE null" en un snapshot que ya no se puede corregir. Y como
             //Nombre(150) + espacio + Apellidos(150) puede dar 301 caracteres contra un
             //TerceroNombre VARCHAR(300), se recorta antes de que el INSERT falle en modo estricto.
-            const terceroNombreCompleto = [tercero.Nombre, tercero.Apellidos].filter(Boolean).join(' ').trim().slice(0, 300);
+            const terceroNombreCompleto = [tercero.terNombres, tercero.terApellidos].filter(Boolean).join(' ').trim().slice(0, 300);
 
             const ventaId = await crearVentaContado({
                 pEmpId: idEmpresa, pUsuId: UsuIdLogin, pTerceroId: idTercero,
                 pTerceroTipoDoc: tipoDocAbreviatura,
-                pTerceroNumeroDoc: tercero.NumeroDocumento,
+                pTerceroNumeroDoc: tercero.terNumDoc,
                 pTerceroNombre: terceroNombreCompleto,
                 pValorDescuento: ValorDescuento, pValorEfectivo: ValorEfectivo, pValorTransaccion: ValorTransaccion,
                 articulosVendidos: articulosResueltos

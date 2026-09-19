@@ -1,6 +1,4 @@
-//todo redondeo de dinero pasa por aqui para evitar comparar decimales con === despues
-//de sumas/restas en punto flotante.
-const redondear = (valor) => Math.round(Number(valor) * 100) / 100;
+import { redondear } from './dinero.js';
 
 //suma Cantidad * PrecioVentaUnidad de cada linea. No confia en un subtotal enviado
 //por el cliente: la venta siempre recalcula esto en el backend.

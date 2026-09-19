@@ -2,50 +2,59 @@
 
 const CAMPOS_ORDENAR_VALIDOS = [1, 2, 3, 4]; // 1:Nombre, 2:CodigoSKU, 3:FechaCreacion
 
-const articuloValidaDatos = async (req,res,next) => {
-    const {Nombre, Descripcion, PrecioVentaUnitario, Propiedades} = req.body;
-
-    let vNombre = String(Nombre ?? '').toUpperCase().trim();
-    let vDescripcion = String(Descripcion ?? '').trim();
+//reglas de un articulo, sin Express de por medio: devuelve el mensaje de error o null si
+//todo esta bien. Vive separada del middleware porque Compras la necesita por cada linea que
+//trae ArticuloNuevo, donde los datos no vienen en req.body sino dentro del arreglo Articulos.
+const validarDatosArticulo = ({Nombre, Descripcion, PrecioVentaUnitario, Propiedades} = {}) => {
+    const vNombre = String(Nombre ?? '').toUpperCase().trim();
+    const vDescripcion = String(Descripcion ?? '').trim();
 
     if (!vNombre || vNombre.length === 0) {
-        return res.status(401).json({msg:'El nombre no puede estar vacío'});
+        return 'El nombre no puede estar vacío';
     }
     if (vNombre.length > 150) {
-        return res.status(401).json({msg:'El nombre supera los 150 caracteres'});
+        return 'El nombre supera los 150 caracteres';
     }
     if (vDescripcion.length > 300) {
-        return res.status(401).json({msg:'La descripción supera los 300 caracteres'});
+        return 'La descripción supera los 300 caracteres';
     }
 
     if (PrecioVentaUnitario !== undefined && PrecioVentaUnitario !== null) {
         if (isNaN(Number(PrecioVentaUnitario)) || Number(PrecioVentaUnitario) < 0) {
-            return res.status(401).json({msg:'El precio de venta es inválido'});
+            return 'El precio de venta es inválido';
         }
     }
 
     if (Propiedades !== undefined && Propiedades !== null) {
         if (!Array.isArray(Propiedades)) {
-            return res.status(401).json({msg:'Propiedades debe ser una lista'});
+            return 'Propiedades debe ser una lista';
         }
         for (const prop of Propiedades) {
             //sin este guarda, un elemento null/primitivo haria estallar el acceso a
             //prop.idPropiedad y la ruta respondería 500 en vez de un 401 de validacion
             if (prop === null || typeof prop !== 'object' || Array.isArray(prop)) {
-                return res.status(401).json({msg:'idPropiedad inválido en Propiedades'});
+                return 'idPropiedad inválido en Propiedades';
             }
             if (!Number.isInteger(prop.idPropiedad)) {
-                return res.status(401).json({msg:'idPropiedad inválido en Propiedades'});
+                return 'idPropiedad inválido en Propiedades';
             }
             if (prop.Valor === undefined || prop.Valor === null || String(prop.Valor).trim().length === 0) {
-                return res.status(401).json({msg:'El valor de la propiedad no puede estar vacío'});
+                return 'El valor de la propiedad no puede estar vacío';
             }
             if (String(prop.Valor).length > 150) {
-                return res.status(401).json({msg:'El valor de la propiedad supera los 150 caracteres'});
+                return 'El valor de la propiedad supera los 150 caracteres';
             }
         }
     }
 
+    return null;
+};
+
+const articuloValidaDatos = async (req,res,next) => {
+    const error = validarDatosArticulo(req.body);
+    if (error) {
+        return res.status(401).json({msg:error});
+    }
     next();
 };
 
@@ -80,4 +89,4 @@ const articuloValidaCosto = async (req,res,next) => {
     next();
 };
 
-export { articuloValidaDatos, articuloValidaFiltros, articuloValidaCosto };
+export { validarDatosArticulo, articuloValidaDatos, articuloValidaFiltros, articuloValidaCosto };

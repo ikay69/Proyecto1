@@ -47,7 +47,7 @@ const movimientosControllers = {
                     return res.status(401).json({msg:'Propietario inválido'});
                 }
 
-                if(existePropietario.terEstado !==true){
+                if(!existePropietario.terEstado){
                     return res.status(401).json({msg:'Propietario inactivo'});
                 }
             }

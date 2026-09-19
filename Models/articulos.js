@@ -136,7 +136,7 @@ const Articulos = {
                 c.Nombre            AS artCategoria,
                 tp.Nombre           AS artTipoProducto,
                 IFNULL(
-                    GROUP_CONCAT(CONCAT(pr.Nombre, ':', ap.Valor) SEPARATOR ','),
+                    GROUP_CONCAT(CONCAT(pr.Nombre, ':', ap.Valor) SEPARATOR ', '),
                     ''
                 ) AS artPropiedades
             FROM Articulos a

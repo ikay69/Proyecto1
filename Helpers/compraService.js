@@ -70,11 +70,18 @@ const crearCompraContado = async ({
         lineas.sort((a, b) => Number(a.idArticulo) - Number(b.idArticulo) || Number(a.idBodega) - Number(b.idBodega));
 
         const compraId = await Compras.crear(connection, {
-            pEmpId, pUsuId, pTerceroId, pTerceroTipoDoc, pTerceroNumeroDoc, pTerceroNombre,
+            pEmpId, 
+            pUsuId, 
+            pTerceroId, 
+            pTerceroTipoDoc,
+            pTerceroNumeroDoc,
+            pTerceroNombre,
             pNumeroDocumentoSoporte: pNumeroDocumentoSoporte ?? null,
-            pTipoCompra: 'CONTADO', pValorSubtotal: subtotal,
+            pTipoCompra: 'CONTADO', 
+            pValorSubtotal: subtotal,
             pValorDescuento: Number(pValorDescuento) || 0,
-            pValorCancelado: cancelado, pValorSaldo: saldo,
+            pValorCancelado: cancelado, 
+            pValorSaldo: saldo,
             pValorEfectivo: Number(pValorEfectivo) || 0,
             pValorTransaccion: Number(pValorTransaccion) || 0
         });

@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dbConnection from '../Database/config.js';
+import history from 'connect-history-api-fallback';  //redireccionamiento
 
 import empresa from '../Routes/empresa.js';
 import auth from '../Routes/auth.js';
@@ -63,7 +64,6 @@ class Server{
 
 
         //this.app.use(cors());
-        this.app.use(express.static('public')); 
 
     }
 
@@ -86,6 +86,9 @@ class Server{
         this.app.use('/api/produccion',produccion);
         this.app.use('/api/venta',venta);
         this.app.use('/api/compra',compra);
+
+        this.app.use(history());
+        this.app.use(express.static('public')); 
     }
 
     listen(){

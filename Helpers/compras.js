@@ -2,7 +2,7 @@
 
 import { validarDatosArticulo } from './articulos.js';
 
-const TIPOS_COMPRA_VALIDOS = ['CONTADO', 'POR_ABONO', 'CREDITO'];
+const TIPOS_COMPRA_VALIDOS = ['CONTADO', 'CREDITO'];
 
 const compraValidaDatos = async (req,res,next) => {
     const {idTercero, TipoCompra, NumeroDocumentoSoporte, ValorDescuento, ValorEfectivo, ValorTransaccion, Articulos} = req.body;
@@ -41,7 +41,9 @@ const compraValidaDatos = async (req,res,next) => {
     const vEfectivo = Number(ValorEfectivo) || 0;
     const vTransaccion = Number(ValorTransaccion) || 0;
     if (vEfectivo <= 0 && vTransaccion <= 0) {
-        return res.status(401).json({msg:'Debe registrar algún valor cancelado (efectivo o transacción)'});
+        if(TipoCompra == 'CONTADO'){
+            return res.status(401).json({msg:'Debe registrar algún valor cancelado (efectivo o transacción)'});
+        }
     }
 
     if (!Array.isArray(Articulos) || Articulos.length === 0) {

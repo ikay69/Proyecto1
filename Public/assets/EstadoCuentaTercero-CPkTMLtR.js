@@ -1,0 +1,1 @@
+import{E as n}from"./EnConstruccion-Bse_YePm.js";import{_ as t,c as e,r as c,o as r}from"./index-Ds7-HRE7.js";const s={name:"EstadoCuentaTercero",components:{EnConstruccion:n}};function a(p,u,_,i,m,d){const o=c("EnConstruccion");return r(),e(o,{titulo:"Estado de cuenta por tercero"})}const C=t(s,[["render",a]]);export{C as default};

@@ -115,7 +115,8 @@ const comprasControllers = {
                 pTerceroNumeroDoc: tercero.terNumDoc,
                 pTerceroNombre: terceroNombreCompleto,
                 pNumeroDocumentoSoporte: soporte,
-                pValorDescuento: ValorDescuento, pValorEfectivo: ValorEfectivo,
+                pValorDescuento: ValorDescuento, 
+                pValorEfectivo: ValorEfectivo,
                 pValorTransaccion: ValorTransaccion,
                 articulosComprados: articulosResueltos
             });

@@ -373,7 +373,7 @@ CREATE TABLE Compras(
 
     MotivoAnulacion         VARCHAR(300) NULL,
 
-    CONSTRAINT chk_compras_tipocompra CHECK (TipoCompra IN ('CONTADO','POR_ABONO','CREDITO')),
+    CONSTRAINT chk_compras_tipocompra CHECK (TipoCompra IN ('CONTADO','CREDITO')),
     CONSTRAINT fk_compras_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
     CONSTRAINT fk_compras_usuario  FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id),
     CONSTRAINT fk_compras_tercero  FOREIGN KEY (TerceroId) REFERENCES Terceros(Id),
@@ -398,4 +398,19 @@ CREATE TABLE CompraDetalles(
     CONSTRAINT fk_compradetalle_compra    FOREIGN KEY (CompraId) REFERENCES Compras(Id),
     CONSTRAINT fk_compradetalle_bodega    FOREIGN KEY (BodegaId) REFERENCES Bodegas(Id),
     CONSTRAINT fk_compradetalle_articulo  FOREIGN KEY (ArticuloId) REFERENCES Articulos(Id)
+);
+
+CREATE TABLE CompraCuotas(
+    Id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    EmpresaId       BIGINT UNSIGNED NOT NULL,
+    CompraId        BIGINT UNSIGNED NOT NULL,
+
+    NumCuota        DECIMAL(10) NOT NULL,
+    ValorCuota      DECIMAL(10,2) NOT NULL,
+    Estado          VARCHAR(50) NOT NULL,
+
+    CONSTRAINT chk_compracuota_estado CHECK (TipoCompra IN ('PENDIENTE','CANCELADA')),
+
+    CONSTRAINT fk_compracuota_empresa   FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_compracuota_compra    FOREIGN KEY (CompraId) REFERENCES Compras(Id),
 );

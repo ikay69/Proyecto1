@@ -1,0 +1,1 @@
+import{E as n}from"./EnConstruccion-Bse_YePm.js";import{_ as s,c as t,r as c,o as e}from"./index-Ds7-HRE7.js";const r={name:"Existencias",components:{EnConstruccion:n}};function a(i,p,_,m,u,f){const o=c("EnConstruccion");return e(),t(o,{titulo:"Existencias"})}const l=s(r,[["render",a]]);export{l as default};

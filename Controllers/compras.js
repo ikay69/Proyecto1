@@ -5,23 +5,34 @@ import Productos from '../Models/productos.js';
 import Bodegas from '../Models/bodegas.js';
 import Compras from '../Models/compras.js';
 import CompraDetalles from '../Models/compraDetalles.js';
-import { crearCompraContado } from '../Helpers/compraService.js';
+import CompraCuotas from '../Models/compraCuotas.js';
+import { crearCompra, anularCompra } from '../Helpers/compraService.js';
 import { validarPropiedadesArticulo } from '../Helpers/propiedadesValidacion.js';
+import { normalizarFecha } from '../Helpers/fechas.js';
+
+//mismo criterio que el catch de `crear`: un Error plano de este modulo trae reglas de negocio y
+//es culpa del cliente (400); un error del driver mysql2 trae code/sqlState y es del servidor
+//(500, con mensaje generico, sin filtrar nombres de tabla ni de constraint).
+//ER_DUP_ENTRY es el caso especial: es el choque contra uq_compracuota_numero, que SI es algo
+//que el cliente puede corregir.
+const responderErrorDeCuota = (res, error, verbo) => {
+    if (error && error.code === 'ER_DUP_ENTRY') {
+        return res.status(400).json({msg:'Esa cuota ya está registrada'});
+    }
+    if (error && (error.code || error.sqlState)) {
+        return res.status(500).json({msg:`Ocurrió un error inesperado al ${verbo} la cuota`});
+    }
+    return res.status(400).json({msg:String(error.message || error)});
+};
 
 const comprasControllers = {
     crear: async (req,res) => {
         try {
             const {idEmpresa, idTercero, TipoCompra, NumeroDocumentoSoporte,
-                   ValorDescuento, ValorEfectivo, ValorTransaccion} = req.body;
+                   ValorDescuento, ValorEfectivo, ValorTransaccion,
+                   FechaCompromiso, NumeroCuotas, ValorCuota, Cuotas} = req.body;
             const articulosBody = req.body.Articulos;
             const UsuIdLogin = req.usuario.Id;
-
-            //solo CONTADO esta implementado en esta fase; el validador de ruta ya acepta los 3
-            //valores del CHECK para que este mismo endpoint sirva sin renombrarse cuando se
-            //construyan la compra con saldo (POR_ABONO) y la compra a credito.
-            if (TipoCompra !== 'CONTADO') {
-                return res.status(400).json({msg:'Esta modalidad de compra aún no está disponible'});
-            }
 
             //OJO con los nombres de campo: Terceros.traerPorId devuelve columnas ALIASADAS
             //(terEstado, terTipDocId, terNumDoc, terNombres, terApellidos), no los nombres crudos
@@ -109,15 +120,33 @@ const comprasControllers = {
                 ? String(NumeroDocumentoSoporte).trim()
                 : null;
 
-            const compraId = await crearCompraContado({
+            //las fechas se normalizan aqui, donde ya se resuelven los demas valores confiables.
+            //normalizarFecha lanza con basura; el middleware de ruta ya la rechazo con 401, asi
+            //que esto es una red de seguridad que el catch convierte en 400.
+            const fechaCompromiso = normalizarFecha(FechaCompromiso);
+            const cuotasResueltas = Array.isArray(Cuotas)
+                ? Cuotas.map(c => ({
+                    NumCuota: c.NumCuota,
+                    ValorCuota: Number(c.ValorCuota),
+                    FechaPago: normalizarFecha(c.FechaPago),
+                    Estado: c.Estado ?? 'PENDIENTE'
+                }))
+                : null;
+
+            const compraId = await crearCompra({
                 pEmpId: idEmpresa, pUsuId: UsuIdLogin, pTerceroId: idTercero,
                 pTerceroTipoDoc: tipoDocAbreviatura,
                 pTerceroNumeroDoc: tercero.terNumDoc,
                 pTerceroNombre: terceroNombreCompleto,
                 pNumeroDocumentoSoporte: soporte,
-                pValorDescuento: ValorDescuento, 
+                pTipoCompra: TipoCompra,
+                pValorDescuento: ValorDescuento,
                 pValorEfectivo: ValorEfectivo,
                 pValorTransaccion: ValorTransaccion,
+                pFechaCompromiso: fechaCompromiso,
+                pNumeroCuotas: NumeroCuotas ?? null,
+                pValorCuota: ValorCuota ?? null,
+                cuotas: cuotasResueltas,
                 articulosComprados: articulosResueltos
             });
 
@@ -169,9 +198,148 @@ const comprasControllers = {
 
             const lineas = await CompraDetalles.traerPorCompra({pEmpId:idEmpresa, pCompraId:idCompra});
 
-            return res.status(200).json({data:{...compra, lineas}});
+            //las cuotas viajan con su compra: nunca se consultan sin ella, asi que no hay un
+            //endpoint aparte. En una compra de contado el arreglo sale vacio.
+            const cuotas = compra.compraTipoCompra === 'CREDITO'
+                ? await CompraCuotas.traerPorCompra({pEmpId:idEmpresa, pCompraId:idCompra})
+                : [];
+
+            return res.status(200).json({data:{...compra, lineas, cuotas}});
         } catch (error) {
             return res.status(500).json({msg:String(error)});
+        }
+    },
+
+    anular: async (req,res) => {
+        try {
+            const {idEmpresa, idCompra, MotivoAnulacion} = req.body;
+            const UsuIdLogin = req.usuario.Id;
+
+            //se lee primero solo para distinguir "no existe" (401) de "ya estaba anulada" (400).
+            //La decision de escribir NO depende de esta lectura: el UPDATE lleva su propio
+            //AND Estado = TRUE, que es lo que cierra la carrera entre leer y escribir.
+            const compra = await Compras.traerPorId({pEmpId:idEmpresa, pId:idCompra});
+            if (!compra) {
+                return res.status(401).json({msg:'Compra inválida'});
+            }
+
+            const anulada = await anularCompra({
+                pEmpId: idEmpresa, pCompraId: idCompra, pUsuId: UsuIdLogin,
+                pMotivo: String(MotivoAnulacion).trim()
+            });
+            if (!anulada) {
+                return res.status(400).json({msg:'La compra ya está anulada'});
+            }
+
+            //anular NO revierte inventario ni caja: hoy el ajuste es manual, por el modulo de
+            //Ajustes. El mensaje se lo recuerda al usuario en vez de dejarlo suponer.
+            return res.status(200).json({
+                msg:'Compra anulada. El inventario no se revirtió: ajústelo manualmente si corresponde.'
+            });
+        } catch (error) {
+            if (error && (error.code || error.sqlState)) {
+                return res.status(500).json({msg:'Ocurrió un error inesperado al anular la compra'});
+            }
+            return res.status(400).json({msg:String(error.message || error)});
+        }
+    },
+
+    //---- cuotas de una compra a credito ----
+    //
+    //El desglose es informativo: el proveedor calcula las cuotas por fuera del sistema y el
+    //usuario las transcribe. Marcar una cuota como CANCELADA (= pagada) NO mueve caja ni
+    //recalcula el ValorSaldo de la cabecera: para eso hara falta el modulo de Abonos.
+    //
+    //Los tres comparten la misma guarda: una compra anulada congela sus cuotas. Congelar es
+    //impedir la escritura, no ocultar la lectura -- getidcompra las sigue devolviendo.
+
+    crearCuota: async (req,res) => {
+        try {
+            const {idEmpresa, idCompra, NumCuota, ValorCuota, FechaPago, Estado} = req.body;
+
+            const compra = await Compras.traerPorId({pEmpId:idEmpresa, pId:idCompra});
+            if (!compra) {
+                return res.status(401).json({msg:'Compra inválida'});
+            }
+            if (!compra.compraEstado) {
+                return res.status(400).json({msg:'La compra está anulada'});
+            }
+            if (compra.compraTipoCompra !== 'CREDITO') {
+                return res.status(400).json({msg:'Solo una compra a crédito tiene cuotas'});
+            }
+            //el tope superior de NumCuota es el NumeroCuotas de ESTA compra: es un dato de la
+            //base, por eso se valida aqui y no en el middleware de ruta.
+            if (NumCuota > compra.compraNumeroCuotas) {
+                return res.status(401).json({msg:`El número de cuota no puede superar ${compra.compraNumeroCuotas}`});
+            }
+
+            const cuotaId = await CompraCuotas.crear({
+                pEmpId: idEmpresa, pCompraId: idCompra, pNumCuota: NumCuota,
+                pValorCuota: Number(ValorCuota), pFechaPago: normalizarFecha(FechaPago),
+                pEstado: Estado ?? 'PENDIENTE'
+            });
+
+            return res.status(200).json({msg:'Cuota registrada', idCuota: cuotaId});
+        } catch (error) {
+            return responderErrorDeCuota(res, error, 'registrar');
+        }
+    },
+
+    actualizarCuota: async (req,res) => {
+        try {
+            const {idEmpresa, idCuota, NumCuota, ValorCuota, FechaPago, Estado} = req.body;
+
+            //traerPorId ya trae el estado y el NumeroCuotas de la compra: una consulta, no dos.
+            const cuota = await CompraCuotas.traerPorId({pEmpId:idEmpresa, pId:idCuota});
+            if (!cuota) {
+                return res.status(401).json({msg:'Cuota inválida'});
+            }
+            if (!cuota.compraEstado) {
+                return res.status(400).json({msg:'La compra está anulada'});
+            }
+            if (NumCuota !== undefined && NumCuota > cuota.compraNumeroCuotas) {
+                return res.status(401).json({msg:`El número de cuota no puede superar ${cuota.compraNumeroCuotas}`});
+            }
+
+            //undefined significa "no cambiar" y llega asi hasta el modelo, que arma el SET con
+            //lo que si vino. null en FechaPago SI es un cambio: vacia la fecha.
+            const filas = await CompraCuotas.actualizar({
+                pEmpId: idEmpresa, pId: idCuota,
+                pNumCuota: NumCuota,
+                pValorCuota: ValorCuota === undefined ? undefined : Number(ValorCuota),
+                pFechaPago: FechaPago === undefined ? undefined : normalizarFecha(FechaPago),
+                pEstado: Estado
+            });
+            if (filas === 0) {
+                return res.status(400).json({msg:'No se actualizó la cuota'});
+            }
+
+            return res.status(200).json({msg:'Cuota actualizada'});
+        } catch (error) {
+            return responderErrorDeCuota(res, error, 'actualizar');
+        }
+    },
+
+    eliminarCuota: async (req,res) => {
+        try {
+            const {idEmpresa, idCuota} = req.body;
+
+            const cuota = await CompraCuotas.traerPorId({pEmpId:idEmpresa, pId:idCuota});
+            if (!cuota) {
+                return res.status(401).json({msg:'Cuota inválida'});
+            }
+            if (!cuota.compraEstado) {
+                return res.status(400).json({msg:'La compra está anulada'});
+            }
+
+            //borrado real, no logico: esta tabla no tiene columna de estado de fila y sus datos
+            //son una transcripcion informativa sin valor contable. Decision explicita.
+            await CompraCuotas.eliminar({pEmpId:idEmpresa, pId:idCuota});
+
+            //204 no lleva cuerpo: .send(), nunca .json().
+            return res.status(204).send();
+        } catch (error) {
+            return responderErrorDeCuota(res, error, 'eliminar');
         }
     }
 };

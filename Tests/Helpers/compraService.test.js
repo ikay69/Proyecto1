@@ -5,9 +5,10 @@ import Compras from '../../Models/compras.js';
 import CompraDetalles from '../../Models/compraDetalles.js';
 import Existencias from '../../Models/existencias.js';
 import ArticuloPropiedades from '../../Models/articuloPropiedades.js';
-import { crearCompraContado } from '../../Helpers/compraService.js';
+import { crearCompra, anularCompra } from '../../Helpers/compraService.js';
+import CompraCuotas from '../../Models/compraCuotas.js';
 
-// crearCompraContado CONFIRMA su propia transaccion, asi que estas pruebas no pueden correr
+// crearCompra CONFIRMA su propia transaccion, asi que estas pruebas no pueden correr
 // dentro de withRollback: siembran con conexiones propias y limpian a mano en el finally,
 // igual que Tests/Helpers/ventaService.test.js.
 
@@ -66,6 +67,9 @@ const limpiarArticulo = async (articuloId) => {
 
 const limpiarCompra = async (compraId) => {
     if (!compraId) return;
+    // CompraCuotas y CompraDetalles apuntan a Compras: se borran primero o el DELETE de la
+    // cabecera choca contra la FK.
+    await pool.query(`DELETE FROM CompraCuotas WHERE CompraId = ?;`, [compraId]);
     await pool.query(`DELETE FROM CompraDetalles WHERE CompraId = ?;`, [compraId]);
     await pool.query(`DELETE FROM Compras WHERE Id = ?;`, [compraId]);
 };
@@ -88,7 +92,7 @@ const traerContexto = async () => {
 const datosCabecera = (ctx, total) => ({
     pEmpId: 1, pUsuId: ctx.usuarioId, pTerceroId: ctx.terceroId,
     pTerceroTipoDoc: null, pTerceroNumeroDoc: null, pTerceroNombre: 'VENDEDOR DE PRUEBA',
-    pNumeroDocumentoSoporte: null,
+    pNumeroDocumentoSoporte: null, pTipoCompra: 'CONTADO',
     pValorDescuento: 0, pValorEfectivo: total, pValorTransaccion: 0
 });
 
@@ -101,7 +105,7 @@ test('compra de articulo existente sube la existencia y deja el movimiento de EN
             usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 10, costo: 100
         });
 
-        compraId = await crearCompraContado({
+        compraId = await crearCompra({
             ...datosCabecera(ctx, 1000),
             articulosComprados: [{
                 idArticulo: articuloId, idBodega: bodegaId,
@@ -151,7 +155,7 @@ test('la compra recalcula el costo promedio ponderado: 10 a 100 mas 10 a 200 da 
             usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 10, costo: 100
         });
 
-        compraId = await crearCompraContado({
+        compraId = await crearCompra({
             ...datosCabecera(ctx, 2000),
             articulosComprados: [{
                 idArticulo: articuloId, idBodega: bodegaId,
@@ -188,7 +192,7 @@ test('una compra puede dar de alta un articulo nuevo sin precio de venta y no ve
     try {
         bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
 
-        compraId = await crearCompraContado({
+        compraId = await crearCompra({
             ...datosCabecera(ctx, 180000),
             articulosComprados: [{
                 idBodega: bodegaId, Cantidad: 1, CostoUnidad: 180000,
@@ -245,7 +249,7 @@ test('una compra que falla a mitad no deja cabecera, lineas, movimientos ni arti
 
         //la segunda linea apunta a una bodega inexistente: el INSERT de CompraDetalles viola el
         //FK contra Bodegas y toda la transaccion se revierte, incluido el articulo de la primera.
-        await assert.rejects(crearCompraContado({
+        await assert.rejects(crearCompra({
             ...datosCabecera(ctx, 200000),
             articulosComprados: [
                 {
@@ -287,7 +291,7 @@ test('rechaza una compra de contado cuyo pago no cubre el total', async () => {
             usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 5, costo: 100
         });
 
-        await assert.rejects(crearCompraContado({
+        await assert.rejects(crearCompra({
             ...datosCabecera(ctx, 500),
             articulosComprados: [{
                 idArticulo: articuloId, idBodega: bodegaId,
@@ -317,7 +321,7 @@ test('el mismo articulo en dos bodegas distintas queda como dos lineas', async (
             usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId: bodegaA, cantidad: 1, costo: 100
         });
 
-        compraId = await crearCompraContado({
+        compraId = await crearCompra({
             ...datosCabecera(ctx, 300),
             articulosComprados: [
                 {idArticulo: articuloId, idBodega: bodegaA, ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 1, CostoUnidad: 100},
@@ -379,12 +383,12 @@ test('asigna el rol PROVEEDOR al tercero que no lo tenia, y no lo duplica al rep
 
         assert.equal(await contarRol(), 0);
 
-        compraA = await crearCompraContado({
+        compraA = await crearCompra({
             ...datosCabecera(ctx, 100), pTerceroId: terceroId, articulosComprados: lineaDePrueba()
         });
         assert.equal(await contarRol(), 1); //se asigno
 
-        compraB = await crearCompraContado({
+        compraB = await crearCompra({
             ...datosCabecera(ctx, 100), pTerceroId: terceroId, articulosComprados: lineaDePrueba()
         });
         assert.equal(await contarRol(), 1); //no se duplico
@@ -400,4 +404,320 @@ test('asigna el rol PROVEEDOR al tercero que no lo tenia, y no lo duplica al rep
             [terceroId]
         );
     }
+});
+
+// ---- compra a credito: los tres escenarios del usuario ----
+
+const cabeceraCredito = (ctx, extra = {}) => ({
+    pEmpId: 1, pUsuId: ctx.usuarioId, pTerceroId: ctx.terceroId,
+    pTerceroTipoDoc: null, pTerceroNumeroDoc: null, pTerceroNombre: 'PROVEEDOR A CREDITO',
+    pNumeroDocumentoSoporte: null, pTipoCompra: 'CREDITO',
+    pValorDescuento: 0, pValorEfectivo: 0, pValorTransaccion: 0,
+    pFechaCompromiso: null, pNumeroCuotas: 3, pValorCuota: 400000, cuotas: null, ...extra
+});
+
+test('escenario 1: credito de una sola cuota con fecha de compromiso', async () => {
+    const ctx = await traerContexto();
+    let bodegaId = null, articuloId = null, compraId = null;
+    try {
+        bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
+        articuloId = await sembrarArticuloConExistencia({
+            usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 0, costo: 0
+        });
+
+        compraId = await crearCompra({
+            ...cabeceraCredito(ctx, {
+                pNumeroCuotas: 1, pValorCuota: 1000000, pFechaCompromiso: '2026-10-15 00:00:00'
+            }),
+            articulosComprados: [{
+                idArticulo: articuloId, idBodega: bodegaId,
+                ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 10, CostoUnidad: 100000
+            }]
+        });
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId});
+        assert.equal(compra.compraTipoCompra, 'CREDITO');
+        assert.equal(compra.compraNumeroCuotas, 1);
+        assert.equal(Number(compra.compraValorCuota), 1000000);
+        assert.ok(compra.compraFechaCompromiso instanceof Date);
+        assert.equal(compra.compraFechaCompromiso.getDate(), 15);
+        // cada campo de dinero por separado: una transposicion entre Cancelado y Saldo pasaria
+        // desapercibida si solo se verificara que la compra existe.
+        assert.equal(Number(compra.compraSubtotal), 1000000);
+        assert.equal(Number(compra.compraCancelado), 0);
+        assert.equal(Number(compra.compraSaldo), 1000000);
+        assert.equal(Number(compra.compraEfectivo), 0);
+        assert.equal(Number(compra.compraTransaccion), 0);
+    } finally {
+        await limpiarCompra(compraId);
+        await limpiarArticulo(articuloId);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+test('escenario 2: credito de varias cuotas del mismo valor, con pago inicial parcial', async () => {
+    const ctx = await traerContexto();
+    let bodegaId = null, articuloId = null, compraId = null;
+    try {
+        bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
+        articuloId = await sembrarArticuloConExistencia({
+            usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 0, costo: 0
+        });
+
+        compraId = await crearCompra({
+            ...cabeceraCredito(ctx, {
+                pValorEfectivo: 150000, pValorTransaccion: 50000,
+                pNumeroCuotas: 4, pValorCuota: 250000
+            }),
+            articulosComprados: [{
+                idArticulo: articuloId, idBodega: bodegaId,
+                ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 10, CostoUnidad: 100000
+            }]
+        });
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId});
+        assert.equal(Number(compra.compraSubtotal), 1000000);
+        assert.equal(Number(compra.compraCancelado), 200000);   // 150000 + 50000
+        assert.equal(Number(compra.compraSaldo), 800000);       // 1000000 - 0 - 200000
+        assert.equal(Number(compra.compraEfectivo), 150000);
+        assert.equal(Number(compra.compraTransaccion), 50000);
+        assert.equal(compra.compraNumeroCuotas, 4);
+        // 4 x 250000 = 1000000 contra un saldo de 800000: el proveedor cobra interes y eso es
+        // correcto. El servicio NO cuadra las cuotas contra el saldo.
+        assert.equal(Number(compra.compraValorCuota), 250000);
+        // con varias cuotas la fecha de compromiso se descarta a proposito.
+        assert.equal(compra.compraFechaCompromiso, null);
+    } finally {
+        await limpiarCompra(compraId);
+        await limpiarArticulo(articuloId);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+test('escenario 3: credito con cuotas de distinto valor guarda el desglose y ValorCuota null', async () => {
+    const ctx = await traerContexto();
+    let bodegaId = null, articuloId = null, compraId = null;
+    try {
+        bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
+        articuloId = await sembrarArticuloConExistencia({
+            usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 0, costo: 0
+        });
+
+        compraId = await crearCompra({
+            ...cabeceraCredito(ctx, {
+                pNumeroCuotas: 3, pValorCuota: null,
+                cuotas: [
+                    {NumCuota: 1, ValorCuota: 500000, FechaPago: '2026-10-15 00:00:00', Estado: 'PENDIENTE'},
+                    {NumCuota: 2, ValorCuota: 350000, FechaPago: '2026-11-15 00:00:00', Estado: 'PENDIENTE'},
+                    {NumCuota: 3, ValorCuota: 200000, FechaPago: null, Estado: 'PENDIENTE'}
+                ]
+            }),
+            articulosComprados: [{
+                idArticulo: articuloId, idBodega: bodegaId,
+                ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 10, CostoUnidad: 100000
+            }]
+        });
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId});
+        assert.equal(compra.compraNumeroCuotas, 3);
+        assert.equal(compra.compraValorCuota, null);
+
+        // leer de vuelta las filas escritas, no solo la cabecera.
+        const cuotas = await CompraCuotas.traerPorCompra({pEmpId: 1, pCompraId: compraId});
+        assert.equal(cuotas.length, 3);
+        assert.deepEqual(cuotas.map(c => c.cuoNumCuota), [1, 2, 3]);
+        assert.deepEqual(cuotas.map(c => Number(c.cuoValorCuota)), [500000, 350000, 200000]);
+        assert.equal(cuotas[0].cuoEstado, 'PENDIENTE');
+        assert.equal(cuotas[0].cuoFechaPago.getDate(), 15);
+        assert.equal(cuotas[2].cuoFechaPago, null);
+    } finally {
+        await limpiarCompra(compraId);
+        await limpiarArticulo(articuloId);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+test('la compra a credito sube existencias igual que la de contado', async () => {
+    const ctx = await traerContexto();
+    let bodegaId = null, articuloId = null, compraId = null;
+    try {
+        bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
+        articuloId = await sembrarArticuloConExistencia({
+            usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 10, costo: 100
+        });
+
+        compraId = await crearCompra({
+            ...cabeceraCredito(ctx, {pNumeroCuotas: 2, pValorCuota: 1200}),
+            articulosComprados: [{
+                idArticulo: articuloId, idBodega: bodegaId,
+                ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 10, CostoUnidad: 200
+            }]
+        });
+
+        // el inventario entra igual sin importar como se pague: 10 a 100 mas 10 a 200 da 150.
+        const bolsa = await Existencias.traerBolsa({
+            pEmpId: 1, pBodegaId: bodegaId, pArticuloId: articuloId,
+            pBolsaEstado: 'DISPONIBLE', pPropietarioId: null
+        });
+        assert.equal(Number(bolsa.Cantidad), 20);
+        assert.equal(Number(bolsa.CostoUnitario), 150);
+
+        const [movimientos] = await pool.query(
+            `SELECT TipoMovimiento, TipoOrigen, OrigenId FROM Movimientos WHERE ArticuloId = ?;`, [articuloId]);
+        assert.equal(movimientos.length, 1);
+        assert.equal(movimientos[0].TipoMovimiento, 'ENTRADA');
+        assert.equal(movimientos[0].TipoOrigen, 'COMPRA');
+        assert.equal(Number(movimientos[0].OrigenId), compraId);
+    } finally {
+        await limpiarCompra(compraId);
+        await limpiarArticulo(articuloId);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+test('rechaza un credito cuyo pago inicial no deja saldo', async () => {
+    const ctx = await traerContexto();
+    let bodegaId = null, articuloId = null;
+    try {
+        bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
+        articuloId = await sembrarArticuloConExistencia({
+            usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 0, costo: 0
+        });
+
+        await assert.rejects(
+            () => crearCompra({
+                ...cabeceraCredito(ctx, {pValorEfectivo: 1000000, pNumeroCuotas: 3, pValorCuota: 1}),
+                articulosComprados: [{
+                    idArticulo: articuloId, idBodega: bodegaId,
+                    ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 10, CostoUnidad: 100000
+                }]
+            }),
+            /CONTADO/
+        );
+
+        // y no dejo cabecera: la validacion corre ANTES de abrir la transaccion.
+        const [filas] = await pool.query(
+            `SELECT COUNT(*) c FROM Compras WHERE TerceroNombre = 'PROVEEDOR A CREDITO' AND EmpresaId = 1;`);
+        assert.equal(Number(filas[0].c), 0);
+    } finally {
+        await limpiarArticulo(articuloId);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+test('un credito que falla a mitad no deja cuotas huerfanas', async () => {
+    const ctx = await traerContexto();
+    let bodegaId = null, articuloId = null;
+    try {
+        bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
+        articuloId = await sembrarArticuloConExistencia({
+            usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 0, costo: 0
+        });
+
+        // una bodega inexistente hace estallar registrarMovimiento DESPUES de que la cabecera,
+        // las lineas y las cuotas ya se insertaron: es el punto exacto donde el rollback importa.
+        await assert.rejects(() => crearCompra({
+            ...cabeceraCredito(ctx, {
+                pNumeroCuotas: 2, pValorCuota: null,
+                cuotas: [{NumCuota: 1, ValorCuota: 600000}, {NumCuota: 2, ValorCuota: 400000}]
+            }),
+            articulosComprados: [{
+                idArticulo: articuloId, idBodega: 999999999,
+                ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 10, CostoUnidad: 100000
+            }]
+        }));
+
+        const [cuotas] = await pool.query(
+            `SELECT COUNT(*) c FROM CompraCuotas cc
+               INNER JOIN Compras co ON co.Id = cc.CompraId
+              WHERE co.TerceroNombre = 'PROVEEDOR A CREDITO';`);
+        assert.equal(Number(cuotas[0].c), 0);
+    } finally {
+        await limpiarArticulo(articuloId);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+// ---- anulacion ----
+
+test('anularCompra marca la compra y NO revierte inventario', async () => {
+    const ctx = await traerContexto();
+    let bodegaId = null, articuloId = null, compraId = null;
+    try {
+        bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
+        articuloId = await sembrarArticuloConExistencia({
+            usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 0, costo: 0
+        });
+
+        compraId = await crearCompra({
+            ...datosCabecera(ctx, 1000),
+            articulosComprados: [{
+                idArticulo: articuloId, idBodega: bodegaId,
+                ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 10, CostoUnidad: 100
+            }]
+        });
+
+        const anulada = await anularCompra({
+            pEmpId: 1, pCompraId: compraId, pUsuId: ctx.usuarioId,
+            pMotivo: 'Devolución total al proveedor'
+        });
+        assert.equal(anulada, true);
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId});
+        assert.equal(Number(compra.compraEstado), 0);
+        assert.equal(compra.compraMotivoAnulacion, 'Devolución total al proveedor');
+        assert.ok(compra.compraFechaAnulacion instanceof Date);
+        assert.ok(compra.compraUsuarioAnulador);
+
+        // DECISION DE NEGOCIO, no un olvido: anular no revierte movimientos, ni existencias, ni
+        // el costo promedio. Hoy el usuario corrige a mano por Ajustes. Si esta prueba empieza
+        // a fallar es porque alguien agrego la reversion -- y entonces hay que reescribirla,
+        // no borrarla.
+        const [movimientos] = await pool.query(`SELECT COUNT(*) c FROM Movimientos WHERE ArticuloId = ?;`, [articuloId]);
+        assert.equal(Number(movimientos[0].c), 1);
+
+        const [existencias] = await pool.query(
+            `SELECT Cantidad FROM Existencias WHERE ArticuloId = ? AND BodegaId = ?;`, [articuloId, bodegaId]);
+        assert.equal(Number(existencias[0].Cantidad), 10);
+    } finally {
+        await limpiarCompra(compraId);
+        await limpiarArticulo(articuloId);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+test('anularCompra devuelve false la segunda vez', async () => {
+    const ctx = await traerContexto();
+    let bodegaId = null, articuloId = null, compraId = null;
+    try {
+        bodegaId = await crearBodegaDePrueba(ctx.usuarioId);
+        articuloId = await sembrarArticuloConExistencia({
+            usuarioId: ctx.usuarioId, productoId: ctx.productoId, bodegaId, cantidad: 0, costo: 0
+        });
+        compraId = await crearCompra({
+            ...datosCabecera(ctx, 1000),
+            articulosComprados: [{
+                idArticulo: articuloId, idBodega: bodegaId,
+                ArticuloNombre: 'ARTICULO DE COMPRA DE PRUEBA', Cantidad: 10, CostoUnidad: 100
+            }]
+        });
+
+        assert.equal(await anularCompra({pEmpId:1, pCompraId:compraId, pUsuId:ctx.usuarioId, pMotivo:'Primera'}), true);
+        assert.equal(await anularCompra({pEmpId:1, pCompraId:compraId, pUsuId:ctx.usuarioId, pMotivo:'Segunda'}), false);
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId});
+        assert.equal(compra.compraMotivoAnulacion, 'Primera');
+    } finally {
+        await limpiarCompra(compraId);
+        await limpiarArticulo(articuloId);
+        await limpiarBodega(bodegaId);
+    }
+});
+
+test('anularCompra devuelve false para una compra inexistente', async () => {
+    const ctx = await traerContexto();
+    assert.equal(
+        await anularCompra({pEmpId: 1, pCompraId: 999999999, pUsuId: ctx.usuarioId, pMotivo: 'No existe'}),
+        false
+    );
 });

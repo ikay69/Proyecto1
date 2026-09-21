@@ -372,11 +372,14 @@ CREATE TABLE Compras(
     ValorCuota              DECIMAL(12,2) NULL,
 
     MotivoAnulacion         VARCHAR(300) NULL,
+    UsuarioIdAnulador       BIGINT UNSIGNED NULL,
+    FechaAnulacion          TIMESTAMP NULL,
 
     CONSTRAINT chk_compras_tipocompra CHECK (TipoCompra IN ('CONTADO','CREDITO')),
     CONSTRAINT fk_compras_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
     CONSTRAINT fk_compras_usuario  FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id),
     CONSTRAINT fk_compras_tercero  FOREIGN KEY (TerceroId) REFERENCES Terceros(Id),
+    CONSTRAINT fk_compras_anulador FOREIGN KEY (UsuarioIdAnulador) REFERENCES Usuarios(Id),
 
     INDEX idx_compras_listado (EmpresaId, FechaCreacion)
 );
@@ -400,18 +403,26 @@ CREATE TABLE CompraDetalles(
     CONSTRAINT fk_compradetalle_articulo  FOREIGN KEY (ArticuloId) REFERENCES Articulos(Id)
 );
 
+-- Desglose opcional de las cuotas de una compra a credito. Es una transcripcion de lo que el
+-- proveedor cobra, no un calculo de este sistema: por eso la tabla no es obligatoria y sus
+-- valores no tienen que sumar el saldo de la compra.
+--
+-- OJO con el vocabulario: aqui Estado='CANCELADA' significa PAGADA (sentido coloquial de
+-- "cancelar una cuota"). En Compras, Estado=FALSE significa ANULADA. Son opuestos.
 CREATE TABLE CompraCuotas(
-    Id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    EmpresaId       BIGINT UNSIGNED NOT NULL,
-    CompraId        BIGINT UNSIGNED NOT NULL,
+    Id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    EmpresaId   BIGINT UNSIGNED NOT NULL,
+    CompraId    BIGINT UNSIGNED NOT NULL,
 
-    NumCuota        DECIMAL(10) NOT NULL,
-    ValorCuota      DECIMAL(10,2) NOT NULL,
-    FechaPago       TIMESTAMP NULL,
-    Estado          VARCHAR(50) NOT NULL,
+    NumCuota    INT UNSIGNED NOT NULL,
+    ValorCuota  DECIMAL(12,2) NOT NULL,
+    FechaPago   TIMESTAMP NULL,
+    Estado      VARCHAR(20) NOT NULL DEFAULT 'PENDIENTE',
 
-    CONSTRAINT chk_compracuota_estado CHECK (TipoCompra IN ('PENDIENTE','CANCELADA')),
+    CONSTRAINT chk_compracuota_estado  CHECK (Estado IN ('PENDIENTE','CANCELADA')),
+    CONSTRAINT fk_compracuota_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_compracuota_compra   FOREIGN KEY (CompraId)  REFERENCES Compras(Id),
+    CONSTRAINT uq_compracuota_numero   UNIQUE (CompraId, NumCuota),
 
-    CONSTRAINT fk_compracuota_empresa   FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
-    CONSTRAINT fk_compracuota_compra    FOREIGN KEY (CompraId) REFERENCES Compras(Id),
+    INDEX idx_compracuotas_compra (EmpresaId, CompraId)
 );

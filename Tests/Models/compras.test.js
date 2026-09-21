@@ -171,3 +171,159 @@ test('crearVarias inserta las lineas y traerPorCompra las devuelve con el nombre
         assert.ok('detBodegaNombre' in lineas[0]);
     });
 });
+
+test('crear persiste los campos del credito y se leen de vuelta', async () => {
+    await withRollback(async (connection) => {
+        const {usuarioId, terceroId} = await datosBase(connection);
+
+        const compraId = await Compras.crear(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pTerceroId: terceroId,
+            pTerceroTipoDoc: 'CC', pTerceroNumeroDoc: '123', pTerceroNombre: 'PROVEEDOR A CREDITO',
+            pNumeroDocumentoSoporte: 'FAC-4471', pTipoCompra: 'CREDITO',
+            pValorSubtotal: 1000000, pValorDescuento: 0, pValorCancelado: 200000, pValorSaldo: 800000,
+            pValorEfectivo: 200000, pValorTransaccion: 0,
+            pFechaCompromiso: null, pNumeroCuotas: 3, pValorCuota: 300000
+        });
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId}, connection);
+        assert.equal(compra.compraTipoCompra, 'CREDITO');
+        assert.equal(compra.compraNumeroCuotas, 3);
+        assert.equal(Number(compra.compraValorCuota), 300000);
+        assert.equal(compra.compraFechaCompromiso, null);
+        // cada campo de dinero por separado: una transposicion entre Cancelado y Saldo pasaria
+        // desapercibida si solo se verificara que la compra se creo.
+        assert.equal(Number(compra.compraCancelado), 200000);
+        assert.equal(Number(compra.compraSaldo), 800000);
+        assert.equal(Number(compra.compraEfectivo), 200000);
+        assert.equal(Number(compra.compraTransaccion), 0);
+    });
+});
+
+test('crear guarda FechaCompromiso cuando la compra es de una sola cuota', async () => {
+    await withRollback(async (connection) => {
+        const {usuarioId, terceroId} = await datosBase(connection);
+
+        const compraId = await Compras.crear(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pTerceroId: terceroId,
+            pTerceroTipoDoc: null, pTerceroNumeroDoc: null, pTerceroNombre: 'PROVEEDOR UNA CUOTA',
+            pNumeroDocumentoSoporte: null, pTipoCompra: 'CREDITO',
+            pValorSubtotal: 500000, pValorDescuento: 0, pValorCancelado: 0, pValorSaldo: 500000,
+            pValorEfectivo: 0, pValorTransaccion: 0,
+            pFechaCompromiso: '2026-10-15 00:00:00', pNumeroCuotas: 1, pValorCuota: 500000
+        });
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId}, connection);
+        assert.ok(compra.compraFechaCompromiso instanceof Date);
+        // el dia que se escribio es el dia que quedo: Helpers/fechas.js existe para esto.
+        assert.equal(compra.compraFechaCompromiso.getDate(), 15);
+        assert.equal(compra.compraFechaCompromiso.getMonth(), 9); // octubre
+    });
+});
+
+test('crear deja los campos del credito en null para una compra de contado', async () => {
+    await withRollback(async (connection) => {
+        const {usuarioId, terceroId} = await datosBase(connection);
+
+        const compraId = await Compras.crear(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pTerceroId: terceroId,
+            pTerceroTipoDoc: null, pTerceroNumeroDoc: null, pTerceroNombre: 'CONTADO',
+            pNumeroDocumentoSoporte: null, pTipoCompra: 'CONTADO',
+            pValorSubtotal: 1000, pValorDescuento: 0, pValorCancelado: 1000, pValorSaldo: 0,
+            pValorEfectivo: 1000, pValorTransaccion: 0
+        });
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId}, connection);
+        assert.equal(compra.compraNumeroCuotas, null);
+        assert.equal(compra.compraValorCuota, null);
+        assert.equal(compra.compraFechaCompromiso, null);
+    });
+});
+
+test('anular marca la compra y guarda motivo, usuario y fecha', async () => {
+    await withRollback(async (connection) => {
+        const {usuarioId, terceroId} = await datosBase(connection);
+
+        const compraId = await Compras.crear(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pTerceroId: terceroId,
+            pTerceroTipoDoc: null, pTerceroNumeroDoc: null, pTerceroNombre: 'PARA ANULAR',
+            pNumeroDocumentoSoporte: null, pTipoCompra: 'CONTADO',
+            pValorSubtotal: 1000, pValorDescuento: 0, pValorCancelado: 1000, pValorSaldo: 0,
+            pValorEfectivo: 1000, pValorTransaccion: 0
+        });
+
+        const filas = await Compras.anular(
+            {pEmpId: 1, pId: compraId, pUsuId: usuarioId, pMotivo: 'Devolución total al proveedor'},
+            connection
+        );
+        assert.equal(filas, 1);
+
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId}, connection);
+        assert.equal(Number(compra.compraEstado), 0);
+        assert.equal(compra.compraMotivoAnulacion, 'Devolución total al proveedor');
+        assert.ok(compra.compraFechaAnulacion instanceof Date);
+        assert.ok(compra.compraUsuarioAnulador);  // el nombre del usuario, via JOIN
+    });
+});
+
+test('anular una compra ya anulada devuelve 0 filas', async () => {
+    await withRollback(async (connection) => {
+        const {usuarioId, terceroId} = await datosBase(connection);
+
+        const compraId = await Compras.crear(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pTerceroId: terceroId,
+            pTerceroTipoDoc: null, pTerceroNumeroDoc: null, pTerceroNombre: 'DOBLE ANULACION',
+            pNumeroDocumentoSoporte: null, pTipoCompra: 'CONTADO',
+            pValorSubtotal: 1000, pValorDescuento: 0, pValorCancelado: 1000, pValorSaldo: 0,
+            pValorEfectivo: 1000, pValorTransaccion: 0
+        });
+
+        const primera = await Compras.anular({pEmpId:1, pId:compraId, pUsuId:usuarioId, pMotivo:'Primera'}, connection);
+        const segunda = await Compras.anular({pEmpId:1, pId:compraId, pUsuId:usuarioId, pMotivo:'Segunda'}, connection);
+        assert.equal(primera, 1);
+        // el AND Estado = TRUE del WHERE hace la operacion idempotente EN LA BASE: sin ventana
+        // de carrera entre un SELECT de chequeo y el UPDATE.
+        assert.equal(segunda, 0);
+
+        // y el motivo de la primera no se piso.
+        const compra = await Compras.traerPorId({pEmpId: 1, pId: compraId}, connection);
+        assert.equal(compra.compraMotivoAnulacion, 'Primera');
+    });
+});
+
+test('anular no toca una compra de otra empresa', async () => {
+    await withRollback(async (connection) => {
+        const {usuarioId, terceroId} = await datosBase(connection);
+
+        const compraId = await Compras.crear(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pTerceroId: terceroId,
+            pTerceroTipoDoc: null, pTerceroNumeroDoc: null, pTerceroNombre: 'AJENA',
+            pNumeroDocumentoSoporte: null, pTipoCompra: 'CONTADO',
+            pValorSubtotal: 1000, pValorDescuento: 0, pValorCancelado: 1000, pValorSaldo: 0,
+            pValorEfectivo: 1000, pValorTransaccion: 0
+        });
+
+        const filas = await Compras.anular({pEmpId: 2, pId: compraId, pUsuId: usuarioId, pMotivo: 'Intruso'}, connection);
+        assert.equal(filas, 0);
+    });
+});
+
+test('traerTodo expone la fecha de compromiso y el numero de cuotas', async () => {
+    await withRollback(async (connection) => {
+        const {usuarioId, terceroId} = await datosBase(connection);
+
+        await Compras.crear(connection, {
+            pEmpId: 1, pUsuId: usuarioId, pTerceroId: terceroId,
+            pTerceroTipoDoc: null, pTerceroNumeroDoc: null, pTerceroNombre: 'EN LISTADO',
+            pNumeroDocumentoSoporte: null, pTipoCompra: 'CREDITO',
+            pValorSubtotal: 500000, pValorDescuento: 0, pValorCancelado: 0, pValorSaldo: 500000,
+            pValorEfectivo: 0, pValorTransaccion: 0,
+            pFechaCompromiso: '2026-10-15 00:00:00', pNumeroCuotas: 1, pValorCuota: 500000
+        });
+
+        const filas = await Compras.traerTodo({pEmpId: 1, pOffset: 0}, connection);
+        const fila = filas.find(f => f.compraTercero === 'EN LISTADO');
+        assert.ok(fila, 'la compra recien creada deberia estar en la primera pagina');
+        assert.equal(fila.compraNumeroCuotas, 1);
+        assert.ok(fila.compraFechaCompromiso instanceof Date);
+    });
+});

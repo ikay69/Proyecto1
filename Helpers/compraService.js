@@ -2,22 +2,36 @@ import { pool } from '../Database/config.js';
 import Articulos from '../Models/articulos.js';
 import Compras from '../Models/compras.js';
 import CompraDetalles from '../Models/compraDetalles.js';
+import CompraCuotas from '../Models/compraCuotas.js';
 import TercerosRoles from '../Models/tercrosRoles.js';
 import { registrarMovimiento } from './inventarioTransacciones.js';
 import {
-    agruparLineasCompra, calcularSubtotalCompra, calcularSaldoCompra, validarSaldoContadoCompra
+    agruparLineasCompra, calcularSubtotalCompra, calcularSaldoCompra,
+    validarSaldoContadoCompra, validarCreditoCompra, validarCuotasCompra
 } from './compraCalculos.js';
 
-//Compra al contado: valida el saldo ANTES de tocar la base de datos, luego en una sola
-//transaccion da de alta los articulos nuevos, crea la cabecera, las lineas, y aumenta
-//existencias via registrarMovimiento (una llamada por linea, cada una contra la bolsa
-//DISPONIBLE de SU bodega). Si cualquier paso falla se revierte todo, incluidos los articulos
-//recien creados -- de ahi que se use Articulos.crearConConexion y no Articulos.crear.
-const crearCompraContado = async ({
+//Registra una compra, de contado o a credito. El cuerpo transaccional es el MISMO para las dos
+//modalidades -- el inventario entra igual sin importar como se pague --, y por eso esto es una
+//sola funcion parametrizada y no dos hermanas: dos copias del ordenamiento de locks divergirian
+//al primer arreglo que se aplique a una sola.
+//
+//En una sola transaccion: da de alta los articulos nuevos, crea la cabecera, las lineas, el
+//desglose de cuotas si viene, y aumenta existencias via registrarMovimiento (una llamada por
+//linea, cada una contra la bolsa DISPONIBLE de SU bodega). Si cualquier paso falla se revierte
+//todo, incluidos los articulos recien creados -- de ahi Articulos.crearConConexion.
+const crearCompra = async ({
     pEmpId, pUsuId, pTerceroId, pTerceroTipoDoc, pTerceroNumeroDoc, pTerceroNombre,
-    pNumeroDocumentoSoporte, pValorDescuento, pValorEfectivo, pValorTransaccion, articulosComprados
+    pNumeroDocumentoSoporte, pTipoCompra, pValorDescuento, pValorEfectivo, pValorTransaccion,
+    pFechaCompromiso = null, pNumeroCuotas = null, pValorCuota = null, cuotas = null,
+    articulosComprados
 }) => {
-    //toda la validacion vive fuera de la transaccion: una compra invalida (saldo != 0, sin
+    //el Controller ya valida el tipo, pero esta funcion es la frontera del servicio: un tipo
+    //desconocido caeria silenciosamente en la rama de contado y guardaria basura en la cabecera.
+    if (pTipoCompra !== 'CONTADO' && pTipoCompra !== 'CREDITO') {
+        throw new Error('Tipo de compra inválido');
+    }
+
+    //toda la validacion vive fuera de la transaccion: una compra invalida (saldo mal, sin
     //lineas, mismo articulo+bodega con costos distintos) ni siquiera abre conexion.
     //calcularSubtotalCompra ya rechaza el arreglo vacio, no hace falta repetir esa guarda.
     const lineas = agruparLineasCompra(articulosComprados ?? []);
@@ -26,7 +40,30 @@ const crearCompraContado = async ({
     const { cancelado, saldo } = calcularSaldoCompra({
         subtotal, descuento: pValorDescuento, efectivo: pValorEfectivo, transaccion: pValorTransaccion
     });
-    validarSaldoContadoCompra(saldo);
+
+    const esCredito = pTipoCompra === 'CREDITO';
+    const traeCuotas = Array.isArray(cuotas) && cuotas.length > 0;
+
+    //unica bifurcacion de negocio entre las dos modalidades. Las dos reglas son espejo: el
+    //contado exige saldo cero, el credito exige saldo positivo.
+    if (esCredito) {
+        validarCreditoCompra({
+            saldo, numeroCuotas: pNumeroCuotas, valorCuota: pValorCuota,
+            fechaCompromiso: pFechaCompromiso, traeCuotas
+        });
+        validarCuotasCompra(cuotas, pNumeroCuotas);
+    } else {
+        validarSaldoContadoCompra(saldo);
+    }
+
+    //una compra de contado no guarda datos de financiacion, aunque el cliente los mande.
+    //Y con varias cuotas la FechaCompromiso se descarta A PROPOSITO: con mas de una cuota las
+    //fechas son de las cuotas y viven en CompraCuotas. Descartarla en silencio es preferible a
+    //un 401 por un campo que el front puede estar enviando por comodidad.
+    const fechaCabecera  = (esCredito && pNumeroCuotas === 1) ? (pFechaCompromiso ?? null) : null;
+    const cuotasCabecera = esCredito ? pNumeroCuotas : null;
+    const valorCabecera  = (esCredito && pValorCuota !== undefined && pValorCuota !== null)
+        ? Number(pValorCuota) : null;
 
     //el rol PROVEEDOR se asigna de forma transparente si el tercero no lo tenia. No es parte de
     //la transaccion de la compra a proposito: no la bloquea, y no tiene sentido revertirlo si la
@@ -77,13 +114,16 @@ const crearCompraContado = async ({
             pTerceroNumeroDoc,
             pTerceroNombre,
             pNumeroDocumentoSoporte: pNumeroDocumentoSoporte ?? null,
-            pTipoCompra: 'CONTADO', 
+            pTipoCompra,
             pValorSubtotal: subtotal,
             pValorDescuento: Number(pValorDescuento) || 0,
-            pValorCancelado: cancelado, 
+            pValorCancelado: cancelado,
             pValorSaldo: saldo,
             pValorEfectivo: Number(pValorEfectivo) || 0,
-            pValorTransaccion: Number(pValorTransaccion) || 0
+            pValorTransaccion: Number(pValorTransaccion) || 0,
+            pFechaCompromiso: fechaCabecera,
+            pNumeroCuotas: cuotasCabecera,
+            pValorCuota: valorCabecera
         });
 
         await CompraDetalles.crearVarias(connection, {
@@ -93,6 +133,12 @@ const crearCompraContado = async ({
                 Cantidad: l.Cantidad, CostoUnidad: l.CostoUnidad
             }))
         });
+
+        //el desglose entra en la MISMA transaccion que la compra: si el movimiento de inventario
+        //falla despues, no pueden sobrevivir cuotas de una compra que no existe.
+        if (esCredito && traeCuotas) {
+            await CompraCuotas.crearVarias(connection, {pEmpId, pCompraId: compraId, cuotas});
+        }
 
         //este bucle no toca el pool: solo usa `connection`, la conexion de esta transaccion.
         //registrarMovimiento recalcula el costo promedio ponderado de la bolsa, porque es una
@@ -123,4 +169,18 @@ const crearCompraContado = async ({
     }
 };
 
-export { crearCompraContado };
+//Anular es la unica operacion correctiva sobre una compra: no existe edicion, porque una compra
+//ya movio existencias y ya recalculo el costo promedio de una o varias bolsas.
+//
+//NO abre transaccion porque es una sola sentencia. El dia que se construya la reversion
+//automatica de inventario y caja, ESTE es el punto donde se envuelve en una y se agregan las
+//llamadas a registrarMovimiento de tipo SALIDA. Hoy el usuario corrige a mano por Ajustes.
+//
+//Devuelve false tanto si la compra no existe como si ya estaba anulada: el Controller los
+//distingue leyendo la compra antes, que es informacion para el mensaje y no para la decision.
+const anularCompra = async ({pEmpId, pCompraId, pUsuId, pMotivo}) => {
+    const filas = await Compras.anular({pEmpId, pId: pCompraId, pUsuId, pMotivo});
+    return filas === 1;
+};
+
+export { crearCompra, anularCompra };

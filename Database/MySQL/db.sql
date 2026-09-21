@@ -407,6 +407,7 @@ CREATE TABLE CompraCuotas(
 
     NumCuota        DECIMAL(10) NOT NULL,
     ValorCuota      DECIMAL(10,2) NOT NULL,
+    FechaPago       TIMESTAMP NULL,
     Estado          VARCHAR(50) NOT NULL,
 
     CONSTRAINT chk_compracuota_estado CHECK (TipoCompra IN ('PENDIENTE','CANCELADA')),

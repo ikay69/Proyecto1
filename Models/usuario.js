@@ -25,7 +25,7 @@ const Usuario = {
 
     async buscarPorUsername(userName) {
         const [rows] = await pool.query(
-        'SELECT Id, Nombres, userName, Pass, Rol, Estado FROM usuarios WHERE userName = ?',
+        'SELECT Id, Nombres, userName, Pass, Rol, Estado FROM Usuarios WHERE userName = ?',
         [userName]
         );
         return rows[0] || null;

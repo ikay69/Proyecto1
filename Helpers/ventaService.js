@@ -47,6 +47,7 @@ const agruparLineasPorArticulo = (articulos) => {
 //cualquier movimiento ya aplicado.
 const crearVentaContado = async ({
     pEmpId, pUsuId, pTerceroId, pTerceroTipoDoc, pTerceroNumeroDoc, pTerceroNombre,
+    pVendedorId = null,
     pValorDescuento, pValorEfectivo, pValorTransaccion, articulosVendidos
 }) => {
     //toda la validacion vive fuera de la transaccion: una venta invalida (saldo != 0, sin
@@ -90,6 +91,7 @@ const crearVentaContado = async ({
 
         const ventaId = await Ventas.crear(connection, {
             pEmpId, pUsuId, pTerceroId, pTerceroTipoDoc, pTerceroNumeroDoc, pTerceroNombre,
+            pVendedorId,
             pTipoVenta: 'CONTADO', pValorSubtotal: subtotal, pValorDescuento: Number(pValorDescuento) || 0,
             pValorCancelado: cancelado, pValorSaldo: saldo,
             pValorEfectivo: Number(pValorEfectivo) || 0, pValorTransaccion: Number(pValorTransaccion) || 0

@@ -11,6 +11,8 @@ import { ventaValidaDatos, ventaValidaFiltros } from '../Helpers/ventas.js';
 const router = Router();
 
 //registrar una venta (por ahora solo la modalidad CONTADO)
+//idVendedor es opcional y NO lleva check(...).custom(validarId): validarId exige un entero y
+//reventaria contra el campo ausente, volviendolo obligatorio. Lo valida ventaValidaDatos.
 router.post('/newventa',[
     validarJWT,
     validarRol('ADMINISTRADOR','VENDEDOR'),
@@ -25,6 +27,8 @@ router.post('/newventa',[
 ],ventasControllers.crear);
 
 //listado paginado de ventas de la empresa
+//idVendedor filtra: ausente o 0 todas, -1 solo las que no tienen vendedor, un id positivo solo
+//las de ese vendedor. Lo valida ventaValidaFiltros, por lo mismo que en newventa.
 router.post('/getallventa',[
     validarJWT,
     validarRol('ADMINISTRADOR','VENDEDOR'),

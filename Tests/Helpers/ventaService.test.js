@@ -511,3 +511,76 @@ test('crearVentaContado toma los articulos en orden ascendente de id sin importa
         await limpiarBodega(bodegaId);
     }
 });
+
+// Vendedores.Nombre tiene UNIQUE (EmpresaId, Nombre): cada vendedor de prueba usa un nombre unico.
+const crearVendedorDePrueba = async (usuarioId) => {
+    const nombre = 'VENDEDOR PRUEBA ' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+    const [insertResult] = await pool.query(
+        `INSERT INTO Vendedores(EmpresaId, UsuarioIdCreador, Nombre) VALUES (1, ?, ?);`,
+        [usuarioId, nombre]
+    );
+    return { vendedorId: insertResult.insertId, nombre };
+};
+
+// Ventas.VendedorId es un FK RESTRICT: la venta se borra antes que el vendedor.
+const limpiarVendedor = async (vendedorId) => {
+    if (!vendedorId) return;
+    await pool.query(`DELETE FROM Vendedores WHERE Id = ?;`, [vendedorId]);
+};
+
+test('crearVentaContado graba el VendedorId que recibe', async () => {
+    const { productoId, usuarioId, terceroId } = await traerContexto();
+    const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
+    const { vendedorId, nombre } = await crearVendedorDePrueba(usuarioId);
+
+    let articuloId, ventaId;
+    try {
+        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:10, costo:100});
+
+        ventaId = await crearVentaContado({
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+            pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
+            pVendedorId:vendedorId,
+            pValorDescuento:0, pValorEfectivo:6000, pValorTransaccion:0,
+            articulosVendidos:[{idArticulo:articuloId, idBodega:bodegaId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
+        });
+
+        const venta = await Ventas.traerPorId({pEmpId:1, pId:ventaId});
+        assert.equal(Number(venta.ventaVendedorId), Number(vendedorId));
+        assert.equal(venta.ventaVendedor, nombre);
+    } finally {
+        await limpiarVenta(ventaId);
+        await limpiarArticulo(articuloId);
+        await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaId);
+        await limpiarVendedor(vendedorId);
+    }
+});
+
+test('crearVentaContado deja VendedorId en NULL si no recibe vendedor', async () => {
+    const { productoId, usuarioId, terceroId } = await traerContexto();
+    const teniaRolCliente = await rolClienteExistia(terceroId);
+    const bodegaId = await crearBodegaDePrueba(usuarioId);
+
+    let articuloId, ventaId;
+    try {
+        articuloId = await sembrarArticuloConExistencia({empId:1, usuarioId, productoId, bodegaId, cantidad:10, costo:100});
+
+        ventaId = await crearVentaContado({
+            pEmpId:1, pUsuId:usuarioId, pTerceroId:terceroId,
+            pTerceroTipoDoc:'CC', pTerceroNumeroDoc:'999', pTerceroNombre:'CLIENTE DE PRUEBA',
+            pValorDescuento:0, pValorEfectivo:6000, pValorTransaccion:0,
+            articulosVendidos:[{idArticulo:articuloId, idBodega:bodegaId, ArticuloNombre:'ARTICULO VENTA DE PRUEBA', Cantidad:2, PrecioVentaUnidad:3000, CostoUnitario:100}]
+        });
+
+        const venta = await Ventas.traerPorId({pEmpId:1, pId:ventaId});
+        assert.equal(venta.ventaVendedorId, null);
+        assert.equal(venta.ventaVendedor, null);
+    } finally {
+        await limpiarVenta(ventaId);
+        await limpiarArticulo(articuloId);
+        await limpiarRolCliente(terceroId, teniaRolCliente);
+        await limpiarBodega(bodegaId);
+    }
+});

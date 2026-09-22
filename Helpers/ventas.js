@@ -3,10 +3,19 @@
 const TIPOS_VENTA_VALIDOS = ['CONTADO', 'POR_ABONO', 'CREDITO'];
 
 const ventaValidaDatos = async (req,res,next) => {
-    const {idTercero, TipoVenta, ValorDescuento, ValorEfectivo, ValorTransaccion, Articulos} = req.body;
+    const {idTercero, idVendedor, TipoVenta, ValorDescuento, ValorEfectivo, ValorTransaccion, Articulos} = req.body;
 
     if (!Number.isInteger(idTercero)) {
         return res.status(401).json({msg:'Tercero inválido'});
+    }
+
+    //idVendedor es opcional: ausente o null significa venta sin vendedor asignado. Si viene,
+    //tiene que ser un entero positivo; que exista, sea de la empresa y este activo lo comprueba
+    //el Controller, que es quien puede consultar la base.
+    if (idVendedor !== undefined && idVendedor !== null) {
+        if (!Number.isInteger(idVendedor) || idVendedor <= 0) {
+            return res.status(401).json({msg:'Vendedor inválido'});
+        }
     }
 
     if (!TIPOS_VENTA_VALIDOS.includes(TipoVenta)) {
@@ -71,10 +80,20 @@ const ventaValidaDatos = async (req,res,next) => {
 };
 
 const ventaValidaFiltros = async (req,res,next) => {
-    const {pagina} = req.body;
+    const {pagina, idVendedor} = req.body;
     if (!Number.isInteger(pagina)) {
         return res.status(401).json({msg:'Pagina invalida'});
     }
+
+    //idVendedor del filtro: ausente o 0 trae todas, -1 solo las que no tienen vendedor
+    //asignado, y un id positivo solo las de ese vendedor. Se rechaza null a proposito:
+    //dejarlo pasar lo convertiria en "todas" sin que nadie lo haya pedido.
+    if (idVendedor !== undefined) {
+        if (!Number.isInteger(idVendedor) || idVendedor < -1) {
+            return res.status(401).json({msg:'Vendedor invalido'});
+        }
+    }
+
     next();
 };
 

@@ -180,6 +180,21 @@ CREATE TABLE Bodegas(
     CONSTRAINT fk_bodegas_usuario FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id)
 );
 
+-- Catalogo de vendedores de la empresa. El prefijo de sus alias en las consultas es
+-- "vdr" y no "ven" porque "ven" ya lo usa Ventas. No se enlaza con Ventas todavia.
+CREATE TABLE Vendedores(
+    Id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    EmpresaId           BIGINT UNSIGNED NOT NULL,
+    UsuarioIdCreador    BIGINT UNSIGNED NOT NULL,
+    Nombre              VARCHAR(100) NOT NULL,
+    Estado              BOOLEAN NOT NULL DEFAULT TRUE,
+    FechaCreacion       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT uq_vendedores_nombre UNIQUE (EmpresaId, Nombre),
+    CONSTRAINT fk_vendedores_empresa FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
+    CONSTRAINT fk_vendedores_usuario FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id)
+);
+
 CREATE TABLE Articulos(
     Id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     EmpresaId           BIGINT UNSIGNED NOT NULL,
@@ -302,6 +317,8 @@ CREATE TABLE Ventas(
     TerceroNumeroDoc    VARCHAR(50) NULL,
     TerceroNombre       VARCHAR(300) NOT NULL,
 
+    VendedorId          BIGINT UNSIGNED NULL,
+
     TipoVenta           VARCHAR(20) NOT NULL,
 
     ValorSubtotal       DECIMAL(12,2) NOT NULL,
@@ -321,8 +338,10 @@ CREATE TABLE Ventas(
     CONSTRAINT fk_ventas_empresa  FOREIGN KEY (EmpresaId) REFERENCES Empresas(Id),
     CONSTRAINT fk_ventas_usuario  FOREIGN KEY (UsuarioIdCreador) REFERENCES Usuarios(Id),
     CONSTRAINT fk_ventas_tercero  FOREIGN KEY (TerceroId) REFERENCES Terceros(Id),
+    CONSTRAINT fk_ventas_vendedor FOREIGN KEY (VendedorId) REFERENCES Vendedores(Id),
 
-    INDEX idx_ventas_listado (EmpresaId, FechaCreacion)
+    INDEX idx_ventas_listado (EmpresaId, FechaCreacion),
+    INDEX idx_ventas_vendedor (EmpresaId, VendedorId, FechaCreacion)
 );
 
 CREATE TABLE VentaDetalles(

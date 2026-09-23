@@ -25,11 +25,18 @@ router.post('/newcompra',[
     validarCampo
 ],comprasControllers.crear);
 
-//listado paginado de compras de la empresa
+//listado paginado de compras de la empresa.
+//Filtros: campoOrdenar (obligatorio, 1..5), orden, textoFiltro e idTercero.
+//
+//idTercero NO lleva check(...).custom(validarId): validarId exige un entero y reventaria contra
+//el campo ausente, volviendo obligatorio un filtro que es opcional. Lo valida compraValidaFiltros,
+//igual que el idVendedor del listado de Ventas.
 router.post('/getallcompra',[
     validarJWT,
     validarRol('ADMINISTRADOR','VENDEDOR'),
     check('idEmpresa','Empresa campo obligatorio').not().isEmpty(),
+    check('campoOrdenar','Campo ordenar obligatorio').not().isEmpty(),
+    check('orden','Orden campo obligatorio').not().isEmpty(),
     check('pagina','Pagina campo obligatorio').not().isEmpty(),
     check('idEmpresa').custom(validarId),
     validarUsuarioEmpresa,

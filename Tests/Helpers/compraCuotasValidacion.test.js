@@ -35,7 +35,7 @@ test('el alta exige NumCuota entero mayor o igual a 1', async () => {
     for (const valor of [undefined, null, 0, -1, 1.5, '2']) {
         const {paso, res} = await correrAlta({NumCuota: valor, ValorCuota: 100000});
         assert.equal(paso, false, `NumCuota=${valor} deberia rechazarse`);
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
     }
 });
 

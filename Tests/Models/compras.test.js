@@ -327,3 +327,211 @@ test('traerTodo expone la fecha de compromiso y el numero de cuotas', async () =
         assert.ok(fila.compraFechaCompromiso instanceof Date);
     });
 });
+
+//---- filtros y orden del listado paginado ----
+//
+//Las tres compras de estas pruebas se siembran con FechaCreacion en 2037 (el tope del TIMESTAMP
+//de MySQL) para que queden siempre en la primera pagina, y con marcas 'ZZ...' para no chocar con
+//los datos sembrados de la base de desarrollo.
+
+const sembrarTresCompras = async (connection) => {
+    const {usuarioId} = await datosBase(connection);
+    const [terceroRows] = await connection.query(`SELECT Id FROM Terceros WHERE EmpresaId = 1 ORDER BY Id LIMIT 2;`);
+    if (terceroRows.length < 2) throw new Error('Se requieren dos Terceros en la empresa 1 para esta prueba');
+    const terceroA = terceroRows[0].Id;
+    const terceroB = terceroRows[1].Id;
+
+    const crear = async ({terceroId, tipoDoc, numeroDoc, nombre, soporte}) => Compras.crear(connection, {
+        pEmpId: 1, pUsuId: usuarioId, pTerceroId: terceroId,
+        pTerceroTipoDoc: tipoDoc, pTerceroNumeroDoc: numeroDoc, pTerceroNombre: nombre,
+        pNumeroDocumentoSoporte: soporte, pTipoCompra: 'CONTADO',
+        pValorSubtotal: 1000, pValorDescuento: 0, pValorCancelado: 1000, pValorSaldo: 0,
+        pValorEfectivo: 1000, pValorTransaccion: 0
+    });
+
+    //A: tercero A, con documento soporte. B: tercero A, sin documento soporte (NULL a proposito).
+    //C: tercero B.
+    const idA = await crear({terceroId: terceroA, tipoDoc: 'ZC', numeroDoc: 'ZZ-100', nombre: 'ZZ ALFA',   soporte: 'ZZFV-001'});
+    const idB = await crear({terceroId: terceroA, tipoDoc: 'ZN', numeroDoc: 'ZZ-200', nombre: 'ZZ BRAVO',  soporte: null});
+    const idC = await crear({terceroId: terceroB, tipoDoc: 'ZP', numeroDoc: 'ZZ-300', nombre: 'ZZ CHARLIE', soporte: 'ZZFV-003'});
+
+    await connection.query(
+        `UPDATE Compras SET FechaCreacion = '2037-01-01 00:00:00' WHERE Id IN (?,?,?);`,
+        [idA, idB, idC]
+    );
+
+    return {terceroA, terceroB, idA, idB, idC};
+};
+
+//solo las filas sembradas por la prueba, en el orden en que las devolvio el listado
+const soloSembradas = (filas, ids) => filas.filter(f => ids.includes(f.compraId)).map(f => f.compraId);
+
+test('traerTodo filtra por TerceroId y con 0 trae los de todos los terceros', async () => {
+    await withRollback(async (connection) => {
+        const {terceroA, terceroB, idA, idB, idC} = await sembrarTresCompras(connection);
+        const todas = [idA, idB, idC];
+
+        const deA = await Compras.traerTodo({pEmpId: 1, pOffset: 0, pTerceroId: terceroA}, connection);
+        assert.deepEqual(soloSembradas(deA, todas).sort(), [idA, idB].sort());
+        assert.ok(deA.every(f => Number(f.compraTerceroId) === Number(terceroA)),
+            'el filtro no debe dejar pasar compras de otro tercero');
+
+        const deB = await Compras.traerTodo({pEmpId: 1, pOffset: 0, pTerceroId: terceroB}, connection);
+        assert.deepEqual(soloSembradas(deB, todas), [idC]);
+
+        //0 y el ausente son el mismo caso: todos los terceros
+        const conCero = await Compras.traerTodo({pEmpId: 1, pOffset: 0, pTerceroId: 0}, connection);
+        assert.deepEqual(soloSembradas(conCero, todas).sort(), todas.slice().sort());
+
+        const sinFiltro = await Compras.traerTodo({pEmpId: 1, pOffset: 0}, connection);
+        assert.deepEqual(soloSembradas(sinFiltro, todas).sort(), todas.slice().sort());
+    });
+});
+
+//el defecto clasico de estos listados: filtrar el listado y no el conteo. Si se separan,
+//cantData deja de corresponder con las paginas y el front pagina al vacio.
+test('contarTodo aplica los mismos filtros que traerTodo', async () => {
+    await withRollback(async (connection) => {
+        const {terceroA, terceroB} = await sembrarTresCompras(connection);
+
+        for (const filtros of [
+            {},
+            {pTerceroId: terceroA},
+            {pTerceroId: terceroB},
+            {pCampoOrden: 'TerceroNombre', pTexto: '%ZZ %'},
+            {pCampoOrden: 'NumeroDocumentoSoporte', pTexto: '%ZZFV%'},
+            {pCampoOrden: 'TerceroNombre', pTexto: '%ZZ %', pTerceroId: terceroA}
+        ]) {
+            const total = await Compras.contarTodo({pEmpId: 1, ...filtros}, connection);
+            const filas = await Compras.traerTodo({pEmpId: 1, pOffset: 0, ...filtros}, connection);
+            assert.equal(Number(total), filas.length,
+                `el conteo y el listado no cuadran para ${JSON.stringify(filtros)}`);
+        }
+    });
+});
+
+test('traerTodo ordena por el campo pedido, en el sentido pedido', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarTresCompras(connection);
+        const todas = [idA, idB, idC];
+
+        const porNombreAsc = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'TerceroNombre', pOrden: 'ASC'}, connection);
+        assert.deepEqual(soloSembradas(porNombreAsc, todas), [idA, idB, idC], 'ALFA, BRAVO, CHARLIE');
+
+        const porNombreDesc = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'TerceroNombre', pOrden: 'DESC'}, connection);
+        assert.deepEqual(soloSembradas(porNombreDesc, todas), [idC, idB, idA]);
+
+        const porNumeroDoc = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'TerceroNumeroDoc', pOrden: 'ASC'}, connection);
+        assert.deepEqual(soloSembradas(porNumeroDoc, todas), [idA, idB, idC]);
+
+        const porTipoDoc = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'TerceroTipoDoc', pOrden: 'DESC'}, connection);
+        assert.deepEqual(soloSembradas(porTipoDoc, todas), [idC, idB, idA], 'ZP, ZN, ZC');
+    });
+});
+
+//el desempate por c.Id va en el MISMO sentido que el orden pedido: con las tres compras en la
+//misma FechaCreacion, el unico criterio que queda es el Id.
+test('el desempate por Id sigue el sentido del orden pedido', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarTresCompras(connection);
+        const todas = [idA, idB, idC];
+
+        const desc = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'FechaCreacion', pOrden: 'DESC'}, connection);
+        assert.deepEqual(soloSembradas(desc, todas), [idC, idB, idA]);
+
+        const asc = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'FechaCreacion', pOrden: 'ASC'}, connection);
+        //en ASC las sembradas son las ULTIMAS (su fecha es la mas alta), pero entre ellas el
+        //orden relativo debe ser el ascendente por Id
+        assert.deepEqual(soloSembradas(asc, todas), [idA, idB, idC]);
+    });
+});
+
+test('el textoFiltro filtra por la misma columna por la que se ordena', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarTresCompras(connection);
+        const todas = [idA, idB, idC];
+
+        const porNombre = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'TerceroNombre', pTexto: '%BRAVO%'}, connection);
+        assert.deepEqual(soloSembradas(porNombre, todas), [idB]);
+
+        const porSoporte = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'NumeroDocumentoSoporte', pTexto: '%ZZFV-003%'}, connection);
+        assert.deepEqual(soloSembradas(porSoporte, todas), [idC]);
+
+        //el texto se aplica a la columna de ORDEN, no a todas: buscar un nombre mientras se
+        //ordena por documento soporte no devuelve nada.
+        const cruzado = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'NumeroDocumentoSoporte', pTexto: '%BRAVO%'}, connection);
+        assert.deepEqual(soloSembradas(cruzado, todas), []);
+    });
+});
+
+//NumeroDocumentoSoporte, TerceroTipoDoc y TerceroNumeroDoc son NULL-ables, y `NULL LIKE '%%'`
+//es NULL, no TRUE: si el "sin filtro" se implementara como un LIKE '%%' en vez de como la
+//ausencia del predicado, las compras sin documento soporte desaparecerian del listado.
+//Si esta prueba falla, ese es el bug: revisar filtroTexto en Models/compras.js.
+test('sin textoFiltro las compras con documento soporte NULL siguen apareciendo', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarTresCompras(connection);
+        const todas = [idA, idB, idC];
+
+        const filas = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'NumeroDocumentoSoporte', pTexto: '%%'}, connection);
+        const devueltas = soloSembradas(filas, todas);
+        assert.ok(devueltas.includes(idB), 'la compra sin documento soporte debe seguir en el listado');
+        assert.equal(devueltas.length, 3);
+
+        const total = await Compras.contarTodo(
+            {pEmpId: 1, pCampoOrden: 'NumeroDocumentoSoporte', pTexto: '%%'}, connection);
+        const totalSinCampo = await Compras.contarTodo({pEmpId: 1}, connection);
+        assert.equal(Number(total), Number(totalSinCampo));
+    });
+});
+
+//pCampoOrden es el unico dato del listado que llega al SQL interpolado. La lista blanca del
+//modelo es lo que cierra la inyeccion: cualquier cosa fuera de ella cae a FechaCreacion en vez
+//de viajar al ORDER BY. Si esta prueba empieza a fallar, no la relajes: la inyeccion vuelve.
+test('un campo de orden fuera de la lista blanca cae a FechaCreacion sin llegar al SQL', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarTresCompras(connection);
+        const todas = [idA, idB, idC];
+
+        const esperado = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'FechaCreacion', pOrden: 'DESC'}, connection);
+
+        for (const campo of ['Id; DROP TABLE Compras', 'ValorSubtotal', '', null, undefined]) {
+            const filas = await Compras.traerTodo(
+                {pEmpId: 1, pOffset: 0, pCampoOrden: campo, pOrden: 'DESC'}, connection);
+            assert.deepEqual(soloSembradas(filas, todas), soloSembradas(esperado, todas),
+                `pCampoOrden ${String(campo)} debio caer a FechaCreacion`);
+        }
+
+        //el sentido tambien: cualquier cosa que no sea ASC ordena DESC
+        const raro = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'FechaCreacion', pOrden: 'DESC; DROP TABLE Compras'}, connection);
+        assert.deepEqual(soloSembradas(raro, todas), soloSembradas(esperado, todas));
+    });
+});
+
+test('traerTodo expone el tercero completo para las columnas por las que se puede ordenar', async () => {
+    await withRollback(async (connection) => {
+        const {terceroA, idA} = await sembrarTresCompras(connection);
+
+        const filas = await Compras.traerTodo({pEmpId: 1, pOffset: 0}, connection);
+        const fila = filas.find(f => f.compraId === idA);
+
+        assert.ok(fila, 'la compra sembrada deberia estar en la primera pagina');
+        assert.equal(Number(fila.compraTerceroId), Number(terceroA));
+        assert.equal(fila.compraTerceroTipoDoc, 'ZC');
+        assert.equal(fila.compraTerceroNumeroDoc, 'ZZ-100');
+        assert.equal(fila.compraTercero, 'ZZ ALFA');
+        assert.equal(fila.compraDocumentoSoporte, 'ZZFV-001');
+    });
+});

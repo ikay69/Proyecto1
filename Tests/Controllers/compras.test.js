@@ -29,7 +29,7 @@ const limpiarArticulo = async (articuloId) => {
     await pool.query(`DELETE FROM Articulos WHERE Id = ?;`, [articuloId]);
 };
 
-test('rechaza con 401 un ArticuloNuevo cuya Propiedad pertenece a otra empresa', async () => {
+test('rechaza con 400 un ArticuloNuevo cuya Propiedad pertenece a otra empresa', async () => {
     const [usuarioRows] = await pool.query(`SELECT Id FROM Usuarios LIMIT 1;`);
     const [terceroRows] = await pool.query(`SELECT Id FROM Terceros WHERE EmpresaId = 1 LIMIT 1;`);
     const [productoRows] = await pool.query(`SELECT Id FROM Productos WHERE EmpresaId = 1 LIMIT 1;`);
@@ -66,7 +66,7 @@ test('rechaza con 401 un ArticuloNuevo cuya Propiedad pertenece a otra empresa',
 
         await comprasControllers.crear(req, res);
 
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
         assert.equal(res.body.msg, 'Propiedad inválida');
 
         // sin el boundary check la compra se habria confirmado: el articulo NO debe existir
@@ -232,14 +232,14 @@ test('anular marca la compra, y anularla dos veces responde 400', async () => {
     }
 });
 
-test('anular una compra inexistente responde 401', async () => {
+test('anular una compra inexistente responde 400', async () => {
     const ctx = await contextoDeCompra();
     const res = crearResSpy();
     await comprasControllers.anular({
         usuario: {Id: ctx.usuarioId},
         body: {idEmpresa: 1, idCompra: 999999999, MotivoAnulacion: 'No existe'}
     }, res);
-    assert.equal(res.statusCode, 401);
+    assert.equal(res.statusCode, 400);
 });
 
 test('anular no alcanza una compra de otra empresa', async () => {
@@ -257,7 +257,7 @@ test('anular no alcanza una compra de otra empresa', async () => {
             usuario: {Id: ctx.usuarioId},
             body: {idEmpresa: 2, idCompra: compraId, MotivoAnulacion: 'Intruso de otra empresa'}
         }, res);
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
 
         const detalle = crearResSpy();
         await comprasControllers.listarPorId({body: {idEmpresa: 1, idCompra: compraId}}, detalle);
@@ -305,7 +305,7 @@ test('crearCuota rechaza un NumCuota que supera el NumeroCuotas de la compra', a
             idEmpresa: 1, idCompra: compraId, NumCuota: 4, ValorCuota: 60000
         }}, res);
         // el tope es un dato de la base, por eso lo valida el Controller y no el middleware.
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
         assert.match(res.body.msg, /3/);
     } finally {
         await borrarCompra(compraId);
@@ -451,12 +451,186 @@ test('los endpoints de cuotas no alcanzan otra empresa', async () => {
         await comprasControllers.actualizarCuota({body: {
             idEmpresa: 2, idCuota: alta.body.idCuota, Estado: 'CANCELADA'
         }}, editar);
-        assert.equal(editar.statusCode, 401);
+        assert.equal(editar.statusCode, 400);
 
         const borrar = crearResSpy();
         await comprasControllers.eliminarCuota({body: {idEmpresa: 2, idCuota: alta.body.idCuota}}, borrar);
-        assert.equal(borrar.statusCode, 401);
+        assert.equal(borrar.statusCode, 400);
     } finally {
         await borrarCompra(compraId);
+    }
+});
+
+//---- listarTodas: los filtros del listado paginado ----
+//
+//Estas pruebas NO pueden correr dentro de withRollback: listarTodas llama al modelo sin
+//connection, o sea contra el pool, y una transaccion abierta en otra conexion no se ve desde
+//ahi. Siembran filas de verdad, marcadas con 'ZZ', y las borran en el finally.
+
+const sembrarComprasListado = async () => {
+    const [usuarioRows] = await pool.query(`SELECT Id FROM Usuarios LIMIT 1;`);
+    const [terceroRows] = await pool.query(`SELECT Id FROM Terceros WHERE EmpresaId = 1 ORDER BY Id LIMIT 2;`);
+    if (terceroRows.length < 2) throw new Error('Se requieren dos Terceros en la empresa 1 para esta prueba');
+    const usuarioId = usuarioRows[0].Id;
+    const terceroA = terceroRows[0].Id;
+    const terceroB = terceroRows[1].Id;
+
+    const crear = async (terceroId, tipoDoc, numeroDoc, nombre, soporte) => {
+        const [res] = await pool.query(
+            `INSERT INTO Compras(
+                EmpresaId, UsuarioIdCreador, TerceroId, TerceroTipoDoc, TerceroNumeroDoc, TerceroNombre,
+                NumeroDocumentoSoporte, TipoCompra, ValorSubtotal, ValorDescuento, ValorCancelado,
+                ValorSaldo, ValorEfectivo, ValorTransaccion, FechaCreacion)
+            VALUES(?,?,?,?,?,?,?,'CONTADO',1000,0,1000,0,1000,0,'2037-01-01 00:00:00');`,
+            [1, usuarioId, terceroId, tipoDoc, numeroDoc, nombre, soporte]
+        );
+        return res.insertId;
+    };
+
+    const idA = await crear(terceroA, 'ZC', 'ZZ-100', 'ZZ ALFA',    'ZZFV-001');
+    const idB = await crear(terceroA, 'ZN', 'ZZ-200', 'ZZ BRAVO',   null);
+    const idC = await crear(terceroB, 'ZP', 'ZZ-300', 'ZZ CHARLIE', 'ZZFV-003');
+
+    return {terceroA, terceroB, idA, idB, idC, ids: [idA, idB, idC]};
+};
+
+const listar = async (body) => {
+    const res = crearResSpy();
+    await comprasControllers.listarTodas({body}, res);
+    return res;
+};
+
+const idsSembrados = (res, ids) => res.body.data.filter(f => ids.includes(f.compraId)).map(f => f.compraId);
+
+test('listarTodas traduce campoOrdenar a su columna y respeta el orden', async () => {
+    const ctx = await sembrarComprasListado();
+    try {
+        //4 = TerceroNombre
+        const asc = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1});
+        assert.equal(asc.statusCode, 200);
+        assert.deepEqual(idsSembrados(asc, ctx.ids), [ctx.idA, ctx.idB, ctx.idC]);
+
+        const desc = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'DESC', pagina: 1});
+        assert.deepEqual(idsSembrados(desc, ctx.ids), [ctx.idC, ctx.idB, ctx.idA]);
+
+        //2 = TerceroTipoDoc (ZC, ZN, ZP), 3 = TerceroNumeroDoc, 1 = NumeroDocumentoSoporte
+        const porTipoDoc = await listar({idEmpresa: 1, campoOrdenar: 2, orden: 'ASC', pagina: 1});
+        assert.deepEqual(idsSembrados(porTipoDoc, ctx.ids), [ctx.idA, ctx.idB, ctx.idC]);
+
+        const porNumeroDoc = await listar({idEmpresa: 1, campoOrdenar: 3, orden: 'DESC', pagina: 1});
+        assert.deepEqual(idsSembrados(porNumeroDoc, ctx.ids), [ctx.idC, ctx.idB, ctx.idA]);
+
+        //5 = FechaCreacion: las tres comparten fecha, asi que decide el desempate por Id
+        const porFecha = await listar({idEmpresa: 1, campoOrdenar: 5, orden: 'DESC', pagina: 1});
+        assert.deepEqual(idsSembrados(porFecha, ctx.ids), [ctx.idC, ctx.idB, ctx.idA]);
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas con un idTercero trae solo las compras de ese tercero', async () => {
+    const ctx = await sembrarComprasListado();
+    try {
+        const deA = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1, idTercero: ctx.terceroA});
+        assert.deepEqual(idsSembrados(deA, ctx.ids), [ctx.idA, ctx.idB]);
+        assert.ok(deA.body.data.every(f => Number(f.compraTerceroId) === Number(ctx.terceroA)));
+        //cantData tiene que corresponder con lo que devuelve el listado, no con el total sin filtrar
+        assert.equal(Number(deA.body.cantData), deA.body.data.length);
+
+        const deB = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1, idTercero: ctx.terceroB});
+        assert.deepEqual(idsSembrados(deB, ctx.ids), [ctx.idC]);
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas con idTercero 0 o ausente trae las compras de todos los terceros', async () => {
+    const ctx = await sembrarComprasListado();
+    try {
+        const conCero = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1, idTercero: 0});
+        assert.deepEqual(idsSembrados(conCero, ctx.ids), [ctx.idA, ctx.idB, ctx.idC]);
+
+        const sinFiltro = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1});
+        assert.deepEqual(idsSembrados(sinFiltro, ctx.ids), [ctx.idA, ctx.idB, ctx.idC]);
+        assert.equal(Number(conCero.body.cantData), Number(sinFiltro.body.cantData));
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas filtra por texto sobre la columna de orden, y cantData lo acompaña', async () => {
+    const ctx = await sembrarComprasListado();
+    try {
+        const porNombre = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1, textoFiltro: 'ZZ BRA'});
+        assert.deepEqual(idsSembrados(porNombre, ctx.ids), [ctx.idB]);
+        assert.equal(Number(porNombre.body.cantData), porNombre.body.data.length);
+
+        //1 = NumeroDocumentoSoporte
+        const porSoporte = await listar({idEmpresa: 1, campoOrdenar: 1, orden: 'ASC', pagina: 1, textoFiltro: 'ZZFV'});
+        assert.deepEqual(idsSembrados(porSoporte, ctx.ids).sort(), [ctx.idA, ctx.idC].sort());
+
+        //el texto en blanco es "sin filtro", no una busqueda de cadena vacia
+        const enBlanco = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1, textoFiltro: '   '});
+        assert.deepEqual(idsSembrados(enBlanco, ctx.ids), [ctx.idA, ctx.idB, ctx.idC]);
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+//misma regla que en el resto de los listados: la fecha no es texto, asi que al ordenar por ella
+//el textoFiltro se ignora en vez de devolver cero filas.
+test('listarTodas desactiva el textoFiltro cuando se ordena por fecha', async () => {
+    const ctx = await sembrarComprasListado();
+    try {
+        const res = await listar({idEmpresa: 1, campoOrdenar: 5, orden: 'DESC', pagina: 1, textoFiltro: 'NO EXISTE NADA ASI'});
+        assert.deepEqual(idsSembrados(res, ctx.ids), [ctx.idC, ctx.idB, ctx.idA]);
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas combina el filtro de tercero con el de texto', async () => {
+    const ctx = await sembrarComprasListado();
+    try {
+        //ZZ CHARLIE es del tercero B: pedirla filtrando por el tercero A no devuelve nada
+        const vacio = await listar({
+            idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1,
+            textoFiltro: 'ZZ CHARLIE', idTercero: ctx.terceroA
+        });
+        assert.deepEqual(idsSembrados(vacio, ctx.ids), []);
+
+        const conAmbos = await listar({
+            idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 1,
+            textoFiltro: 'ZZ ', idTercero: ctx.terceroA
+        });
+        assert.deepEqual(idsSembrados(conAmbos, ctx.ids), [ctx.idA, ctx.idB]);
+        assert.equal(Number(conAmbos.body.cantData), conAmbos.body.data.length);
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas ajusta una pagina fuera de rango en vez de devolver vacio', async () => {
+    const ctx = await sembrarComprasListado();
+    try {
+        const lejos = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 9999, idTercero: ctx.terceroB});
+        assert.equal(lejos.statusCode, 200);
+        assert.deepEqual(idsSembrados(lejos, ctx.ids), [ctx.idC], 'la pagina se recorta a la ultima con datos');
+
+        const cero = await listar({idEmpresa: 1, campoOrdenar: 4, orden: 'ASC', pagina: 0, idTercero: ctx.terceroB});
+        assert.deepEqual(idsSembrados(cero, ctx.ids), [ctx.idC]);
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas no alcanza las compras de otra empresa', async () => {
+    const ctx = await sembrarComprasListado();
+    try {
+        const ajena = await listar({idEmpresa: 2, campoOrdenar: 4, orden: 'ASC', pagina: 1});
+        assert.equal(ajena.statusCode, 200);
+        assert.deepEqual(idsSembrados(ajena, ctx.ids), []);
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
     }
 });

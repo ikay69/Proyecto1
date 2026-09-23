@@ -56,7 +56,7 @@ const cuerpoVenta = (terceroId, extra = {}) => ({
     ...extra
 });
 
-test('crear rechaza con 401 un vendedor de otra empresa', async () => {
+test('crear rechaza con 400 un vendedor de otra empresa', async () => {
     const { usuarioId, terceroId } = await traerContexto();
     let vendedorAjenoId;
     try {
@@ -68,14 +68,14 @@ test('crear rechaza con 401 un vendedor de otra empresa', async () => {
             res
         );
 
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
         assert.match(res.body.msg, /vendedor/i);
     } finally {
         await limpiar([], [vendedorAjenoId]);
     }
 });
 
-test('crear rechaza con 401 un vendedor inactivo', async () => {
+test('crear rechaza con 400 un vendedor inactivo', async () => {
     const { usuarioId, terceroId } = await traerContexto();
     let vendedorInactivoId;
     try {
@@ -87,14 +87,14 @@ test('crear rechaza con 401 un vendedor inactivo', async () => {
             res
         );
 
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
         assert.match(res.body.msg, /vendedor/i);
     } finally {
         await limpiar([], [vendedorInactivoId]);
     }
 });
 
-test('crear rechaza con 401 un idVendedor que no existe', async () => {
+test('crear rechaza con 400 un idVendedor que no existe', async () => {
     const { usuarioId, terceroId } = await traerContexto();
 
     const res = crearResSpy();
@@ -103,7 +103,7 @@ test('crear rechaza con 401 un idVendedor que no existe', async () => {
         res
     );
 
-    assert.equal(res.statusCode, 401);
+    assert.equal(res.statusCode, 400);
     assert.match(res.body.msg, /vendedor/i);
 });
 

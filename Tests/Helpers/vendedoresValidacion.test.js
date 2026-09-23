@@ -27,7 +27,7 @@ test('vdrValidaNombre rechaza nombre vacio o ausente', async () => {
     for (const body of [{Nombre: '   '}, {Nombre: ''}, {}]) {
         const r = await correr(vdrValidaNombre, body);
         assert.equal(r.paso, false);
-        assert.equal(r.codigo, 401);
+        assert.equal(r.codigo, 400);
         assert.match(r.msg, /nombre no puede estar/i);
     }
 });

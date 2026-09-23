@@ -63,7 +63,7 @@ test('crear rechaza con 400 un nombre que ya existe en la empresa', async () => 
     }
 });
 
-test('editar rechaza con 401 un nombre que ya usa otro vendedor', async () => {
+test('editar rechaza con 400 un nombre que ya usa otro vendedor', async () => {
     const marcador = nuevoMarcador();
     const usuarioId = await usuarioDePrueba();
     try {
@@ -77,7 +77,7 @@ test('editar rechaza con 401 un nombre que ya usa otro vendedor', async () => {
             res
         );
 
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
         assert.match(res.body.msg, /ya existe/i);
     } finally {
         await limpiar(marcador);
@@ -199,9 +199,9 @@ test('listarActivos devuelve data con vdrId y vdrNombre', async () => {
     }
 });
 
-test('listarPorId responde 401 cuando el vendedor no es de la empresa', async () => {
+test('listarPorId responde 400 cuando el vendedor no es de la empresa', async () => {
     const res = crearResSpy();
     await vendedoresControllers.listarPorId({body: {idEmpresa: 999999, idVendedor: 1}}, res);
 
-    assert.equal(res.statusCode, 401);
+    assert.equal(res.statusCode, 400);
 });

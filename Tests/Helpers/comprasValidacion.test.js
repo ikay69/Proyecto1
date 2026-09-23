@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compraValidaDatos, compraValidaAnulacion } from '../../Helpers/compras.js';
+import { compraValidaDatos, compraValidaAnulacion, compraValidaFiltros } from '../../Helpers/compras.js';
 
 // doble de `res` minimo: guarda el status y el cuerpo en vez de escribir en un socket.
 const construirRes = () => {
@@ -33,7 +33,7 @@ test('acepta una compra minima valida', async () => {
 test('rechaza tipo de compra invalido', async () => {
     const {paso, res} = await correr(bodyValido({TipoCompra: 'REGALO'}));
     assert.equal(paso, false);
-    assert.equal(res.statusCode, 401);
+    assert.equal(res.statusCode, 400);
     assert.match(res.cuerpo.msg, /Tipo de compra/);
 });
 
@@ -41,14 +41,14 @@ test('POR_ABONO ya no es un tipo de compra valido', async () => {
     // dejo de existir en el dominio: ahora son dos modalidades, no tres.
     const {paso, res} = await correr(bodyValido({TipoCompra: 'POR_ABONO'}));
     assert.equal(paso, false);
-    assert.equal(res.statusCode, 401);
+    assert.equal(res.statusCode, 400);
     assert.match(res.cuerpo.msg, /Tipo de compra/);
 });
 
 test('CONTADO exige algun valor cancelado', async () => {
     const {paso, res} = await correr(bodyValido({ValorEfectivo: 0, ValorTransaccion: 0}));
     assert.equal(paso, false);
-    assert.equal(res.statusCode, 401);
+    assert.equal(res.statusCode, 400);
     assert.match(res.cuerpo.msg, /valor cancelado/);
 });
 
@@ -113,7 +113,7 @@ test('rechaza cantidad o costo no positivos, y bodega no entera', async () => {
 test('rechaza un elemento null en el arreglo de articulos sin estallar', async () => {
     const {paso, res} = await correr(bodyValido({Articulos: [null]}));
     assert.equal(paso, false);
-    assert.equal(res.statusCode, 401);
+    assert.equal(res.statusCode, 400);
 });
 
 // ---- campos del credito ----
@@ -131,7 +131,7 @@ test('CREDITO exige NumeroCuotas entero mayor o igual a 1', async () => {
     for (const valor of [undefined, null, 0, -1, 1.5, '3']) {
         const {paso, res} = await correr(creditoBody({NumeroCuotas: valor}));
         assert.equal(paso, false, `NumeroCuotas=${valor} deberia rechazarse`);
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
     }
 });
 
@@ -175,7 +175,7 @@ test('CREDITO rechaza un detalle de Cuotas invalido', async () => {
 
     const nula = await correr(creditoBody({Cuotas: [null]}));
     assert.equal(nula.paso, false);
-    assert.equal(nula.res.statusCode, 401);  // 401, no 500: la guarda no deja estallar
+    assert.equal(nula.res.statusCode, 400);  // 400, no 500: la guarda no deja estallar
 });
 
 test('CONTADO ignora los campos del credito en vez de rechazarlos', async () => {
@@ -198,7 +198,7 @@ test('la anulacion exige un motivo', async () => {
     for (const motivo of [undefined, null, '', '   ', 123]) {
         const {paso, res} = await correrAnulacion({MotivoAnulacion: motivo});
         assert.equal(paso, false, `motivo=${motivo} deberia rechazarse`);
-        assert.equal(res.statusCode, 401);
+        assert.equal(res.statusCode, 400);
     }
 });
 
@@ -222,4 +222,74 @@ test('la anulacion rechaza un motivo de mas de 300 caracteres', async () => {
 test('la anulacion acepta un motivo valido', async () => {
     assert.equal((await correrAnulacion({MotivoAnulacion: 'Devolución total al proveedor'})).paso, true);
     assert.equal((await correrAnulacion({MotivoAnulacion: 'x'.repeat(300)})).paso, true);
+});
+
+//---- compraValidaFiltros: los filtros del listado paginado ----
+
+const correrFiltros = async (body) => {
+    const res = construirRes();
+    let paso = false;
+    await compraValidaFiltros({body}, res, () => { paso = true; });
+    return {paso, res};
+};
+
+const filtrosValidos = (extra = {}) => ({campoOrdenar: 1, orden: 'ASC', pagina: 1, ...extra});
+
+test('los filtros aceptan el cuerpo minimo: campoOrdenar y pagina', async () => {
+    assert.equal((await correrFiltros(filtrosValidos())).paso, true);
+});
+
+test('los filtros exigen una pagina entera', async () => {
+    for (const pagina of [undefined, null, '1', 1.5]) {
+        const {paso, res} = await correrFiltros(filtrosValidos({pagina}));
+        assert.equal(paso, false, `pagina ${String(pagina)} no debio pasar`);
+        assert.equal(res.statusCode, 400);
+        assert.match(res.cuerpo.msg, /Pagina/);
+    }
+});
+
+test('los filtros aceptan los cinco campos de orden y rechazan cualquier otro', async () => {
+    for (const campoOrdenar of [1, 2, 3, 4, 5]) {
+        assert.equal((await correrFiltros(filtrosValidos({campoOrdenar}))).paso, true, `campoOrdenar ${campoOrdenar} debio pasar`);
+    }
+    for (const campoOrdenar of [undefined, null, 0, 6, '1']) {
+        const {paso, res} = await correrFiltros(filtrosValidos({campoOrdenar}));
+        assert.equal(paso, false, `campoOrdenar ${String(campoOrdenar)} no debio pasar`);
+        assert.equal(res.statusCode, 400);
+        assert.match(res.cuerpo.msg, /Campo de orden/);
+    }
+});
+
+test('idTercero es opcional: ausente y 0 pasan, un id positivo pasa', async () => {
+    assert.equal((await correrFiltros(filtrosValidos())).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({idTercero: 0}))).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({idTercero: 7}))).paso, true);
+});
+
+//null se rechaza A PROPOSITO en vez de tratarlo como "todos": dejarlo pasar convertiria un error
+//del cliente en un filtro silenciosamente distinto al que pidio. Misma regla que el idVendedor
+//del listado de Ventas. Si esta prueba empieza a fallar, la decision cambio: revisala, no la borres.
+test('idTercero rechaza null, negativos y no enteros', async () => {
+    for (const idTercero of [null, -1, 1.5, '3']) {
+        const {paso, res} = await correrFiltros(filtrosValidos({idTercero}));
+        assert.equal(paso, false, `idTercero ${String(idTercero)} no debio pasar`);
+        assert.equal(res.statusCode, 400);
+        assert.match(res.cuerpo.msg, /Tercero/);
+    }
+});
+
+test('el textoFiltro es opcional y se rechaza por encima de 100 caracteres', async () => {
+    assert.equal((await correrFiltros(filtrosValidos())).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({textoFiltro: '   '}))).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({textoFiltro: 'FV-001'}))).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({textoFiltro: 'x'.repeat(100)}))).paso, true);
+
+    const {paso, res} = await correrFiltros(filtrosValidos({textoFiltro: 'x'.repeat(101)}));
+    assert.equal(paso, false);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.cuerpo.msg, /100/);
+});
+
+test('el textoFiltro cuenta los caracteres despues de recortar espacios', async () => {
+    assert.equal((await correrFiltros(filtrosValidos({textoFiltro: '  ' + 'x'.repeat(100) + '  '}))).paso, true);
 });

@@ -167,15 +167,65 @@ const comprasControllers = {
 
     listarTodas: async (req,res) => {
         try {
-            const {idEmpresa, pagina} = req.body;
+            const {idEmpresa, campoOrdenar, orden, pagina, textoFiltro, idTercero} = req.body;
 
             let vPagina = Number(pagina);
-            const cantCompras = await Compras.contarTodo({pEmpId:idEmpresa});
+
+            //cualquier valor que no sea la cadena 'DESC' ordena ascendente. Es la convencion de
+            //los otros diez listados paginados: 1 y 2 NO son ASC y DESC, aunque la documentacion
+            //lo dijera hasta 2026-09-22.
+            const vOrden = (orden === 'DESC') ? 'DESC' : 'ASC';
+
+            //el numero de la ruta se traduce aqui al nombre de la columna. El modelo vuelve a
+            //validarlo contra su lista blanca: es el unico dato del listado que viaja al SQL
+            //interpolado y no como parametro.
+            let vCampoOrdenar = '';
+            switch (campoOrdenar) {
+                case 1:
+                    vCampoOrdenar = 'NumeroDocumentoSoporte';
+                    break;
+                case 2:
+                    vCampoOrdenar = 'TerceroTipoDoc';
+                    break;
+                case 3:
+                    vCampoOrdenar = 'TerceroNumeroDoc';
+                    break;
+                case 4:
+                    vCampoOrdenar = 'TerceroNombre';
+                    break;
+                case 5:
+                    vCampoOrdenar = 'FechaCreacion';
+                    break;
+                default:
+                    vCampoOrdenar = 'FechaCreacion';
+                    break;
+            }
+
+            //el campo por el que se ordena es el mismo por el que filtra textoFiltro. La fecha
+            //no es texto, asi que al ordenar por ella el filtro de texto se desactiva.
+            let vTextoFiltro = '%%';
+            if (campoOrdenar !== 5) {
+                if (textoFiltro !== undefined && textoFiltro && String(textoFiltro).trim().length > 0) {
+                    vTextoFiltro = '%' + String(textoFiltro).trim() + '%';
+                }
+            }
+
+            //ausente, 0 o negativo = todos los terceros. La ruta ya rechazo null y los no enteros.
+            const vTerceroId = Number.isInteger(idTercero) && idTercero > 0 ? idTercero : 0;
+
+            //contarTodo y traerTodo reciben EXACTAMENTE los mismos filtros: si se separan,
+            //cantData deja de corresponder con las paginas que devuelve el listado.
+            const cantCompras = await Compras.contarTodo({
+                pEmpId:idEmpresa, pCampoOrden:vCampoOrdenar, pTexto:vTextoFiltro, pTerceroId:vTerceroId
+            });
             const maxPagina = Math.max(1, Math.ceil(cantCompras/50));
             vPagina = Math.min(Math.max(vPagina,1), maxPagina);
             const vOffset = (vPagina - 1) * 50;
 
-            const compras = await Compras.traerTodo({pEmpId:idEmpresa, pOffset:vOffset});
+            const compras = await Compras.traerTodo({
+                pEmpId:idEmpresa, pOffset:vOffset, pCampoOrden:vCampoOrdenar, pOrden:vOrden,
+                pTexto:vTextoFiltro, pTerceroId:vTerceroId
+            });
 
             return res.status(200).json({cantData:cantCompras, data:compras});
         } catch (error) {

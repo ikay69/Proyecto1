@@ -1,5 +1,42 @@
 import { pool } from '../Database/config.js';
 
+//---- filtros del listado paginado ----
+//
+//Los predicados se arman en JavaScript y NO como una condicion que el SQL resuelva en tiempo de
+//ejecucion (`AND (? = 0 OR c.TerceroId = ?)`). Esa forma devuelve lo mismo en una sola consulta,
+//pero envuelve la columna en algo que el optimizador no puede evaluar al planear y deja de usar
+//el indice. Misma decision, y por la misma razon, que el filtro de vendedor de Models/ventas.js.
+//
+//Los TRES de abajo los comparten traerTodo y contarTodo: si se separan, cantData y las paginas
+//dejan de cuadrar. Hay pruebas que lo fijan.
+
+//0, ausente o cualquier valor que no sea un id positivo trae las compras de todos los terceros.
+//No existe el caso "sin tercero" de Ventas (-1): Compras.TerceroId es NOT NULL.
+const filtroTercero = (pTerceroId) => {
+    const id = Number(pTerceroId);
+    if (id > 0) return {sql: 'AND c.TerceroId = ?', params: [id]};
+    return {sql: '', params: []};
+};
+
+//el texto filtra por la MISMA columna por la que se ordena, como en el resto de los listados del
+//proyecto. '%%' es el "sin filtro" que manda el Controller, y se traduce a NO poner el LIKE en
+//lugar de a `LIKE '%%'`: las tres columnas de documento son NULL-ables y `NULL LIKE '%%'` es
+//NULL, asi que con el LIKE puesto una compra sin documento soporte desapareceria del listado.
+const filtroTexto = (pCampoOrden, pTexto) => {
+    if (!pTexto || pTexto === '%%') return {sql: '', params: []};
+    return {sql: `AND c.${pCampoOrden} LIKE ?`, params: [pTexto]};
+};
+
+//el nombre de una columna no se puede parametrizar: pCampoOrden llega al ORDER BY interpolado.
+//El Controller traduce un numero a un nombre y nunca deja pasar texto del cliente, pero al
+//modelo tambien lo llaman las pruebas y lo llamara el proximo endpoint: la lista blanca es lo
+//que cierra la inyeccion, no la validacion de la ruta.
+const COLUMNAS_ORDEN = [
+    'NumeroDocumentoSoporte', 'TerceroTipoDoc', 'TerceroNumeroDoc', 'TerceroNombre', 'FechaCreacion'
+];
+const columnaOrden = (pCampoOrden) => COLUMNAS_ORDEN.includes(pCampoOrden) ? pCampoOrden : 'FechaCreacion';
+const sentidoOrden = (pOrden) => (String(pOrden).toUpperCase() === 'ASC' ? 'ASC' : 'DESC');
+
 const Compras = {
     //recibe la conexion de la transaccion del llamador (Helpers/compraService.js): la compra,
     //sus lineas, los articulos que se den de alta y los movimientos de inventario deben
@@ -50,39 +87,68 @@ const Compras = {
         return resultado.affectedRows;
     },
 
-    //FechaCreacion es un TIMESTAMP con granularidad de segundo: varias compras del mismo segundo
-    //no tienen orden definido entre si, y sin desempate una misma fila puede repetirse o
-    //desaparecer al cambiar de pagina. c.Id DESC lo vuelve determinista.
+    //Ninguna de las dos columnas por las que se puede ordenar es unica, asi que sin desempate
+    //una misma fila puede repetirse o desaparecer al cambiar de pagina. Peor en FechaCreacion,
+    //que es un TIMESTAMP con granularidad de segundo: varias compras del mismo segundo no tienen
+    //orden definido entre si. c.Id lo vuelve determinista, y va en el MISMO sentido que el orden
+    //pedido para que el empate no contradiga lo que el usuario eligio.
+    //
+    //Los defaults reproducen el contrato anterior a los filtros (FechaCreacion DESC, sin texto y
+    //sin tercero), para que los llamadores que solo pasan pEmpId y pOffset sigan funcionando.
+    //
     //connWrapper = pool sigue el mismo patron que traerPorId: por defecto usa el pool, pero
     //las pruebas que corren dentro de withRollback le pasan la conexion de su propia
     //transaccion, porque de lo contrario el pool (otra conexion) jamas veria filas todavia sin
     //confirmar.
-    async traerTodo({pEmpId, pOffset}, connWrapper = pool){
+    async traerTodo({pEmpId, pOffset, pCampoOrden = 'FechaCreacion', pOrden = 'DESC', pTexto = '%%', pTerceroId = 0}, connWrapper = pool){
+        const campo   = columnaOrden(pCampoOrden);
+        const sentido = sentidoOrden(pOrden);
+        const tercero = filtroTercero(pTerceroId);
+        const texto   = filtroTexto(campo, pTexto);
+
         const [rows] = await connWrapper.query(
             `SELECT
-                c.Id                AS compraId, 
-                c.FechaCreacion     AS compraFecha, 
+                c.Id                AS compraId,
+                c.FechaCreacion     AS compraFecha,
+                c.TerceroId         AS compraTerceroId,
+                c.TerceroTipoDoc    AS compraTerceroTipoDoc,
+                c.TerceroNumeroDoc  AS compraTerceroNumeroDoc,
                 c.TerceroNombre     AS compraTercero,
                 c.NumeroDocumentoSoporte AS compraDocumentoSoporte,
                 c.TipoCompra        AS compraTipoCompra,
-                c.FechaCompromiso   AS compraFechaCompromiso, 
+                c.FechaCompromiso   AS compraFechaCompromiso,
                 c.NumeroCuotas      AS compraNumeroCuotas,
                 c.ValorSubtotal     AS compraSubtotal,
-                c.ValorDescuento    AS compraDescuento, 
+                c.ValorDescuento    AS compraDescuento,
                 c.ValorCancelado    AS compraCancelado,
-                c.ValorSaldo        AS compraSaldo, 
+                c.ValorSaldo        AS compraSaldo,
                 c.Estado            AS compraEstado
             FROM Compras c
             WHERE c.EmpresaId = ?
-            ORDER BY c.FechaCreacion DESC, c.Id DESC
+            ${tercero.sql}
+            ${texto.sql}
+            ORDER BY c.${campo} ${sentido}, c.Id ${sentido}
             LIMIT 50 OFFSET ?;`,
-            [pEmpId, pOffset]
+            [pEmpId, ...tercero.params, ...texto.params, pOffset]
         );
         return rows || [];
     },
 
-    async contarTodo({pEmpId}, connWrapper = pool){
-        const [rows] = await connWrapper.query(`SELECT COUNT(*) AS total FROM Compras WHERE EmpresaId = ?;`, [pEmpId]);
+    //mismo WHERE que traerTodo, con los mismos tres filtros. No lleva ORDER BY: sobre un
+    //COUNT(*) no cambia nada.
+    async contarTodo({pEmpId, pCampoOrden = 'FechaCreacion', pTexto = '%%', pTerceroId = 0}, connWrapper = pool){
+        const campo   = columnaOrden(pCampoOrden);
+        const tercero = filtroTercero(pTerceroId);
+        const texto   = filtroTexto(campo, pTexto);
+
+        const [rows] = await connWrapper.query(
+            `SELECT COUNT(*) AS total
+            FROM Compras c
+            WHERE c.EmpresaId = ?
+            ${tercero.sql}
+            ${texto.sql};`,
+            [pEmpId, ...tercero.params, ...texto.params]
+        );
         return rows[0].total;
     },
 

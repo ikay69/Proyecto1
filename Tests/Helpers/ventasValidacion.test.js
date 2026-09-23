@@ -44,7 +44,7 @@ test('ventaValidaDatos rechaza un idVendedor que no es entero positivo', async (
     for (const idVendedor of ['7', 7.5, 0, -1, true, {}]) {
         const r = await correr(ventaValidaDatos, ventaValida({idVendedor}));
         assert.equal(r.paso, false, 'idVendedor ' + String(idVendedor));
-        assert.equal(r.statusCode, 401);
+        assert.equal(r.statusCode, 400);
         assert.match(r.msg, /vendedor/i);
     }
 });
@@ -65,7 +65,7 @@ test('ventaValidaFiltros rechaza un idVendedor que no es entero o es menor que -
     for (const idVendedor of ['0', 1.5, -2, null, true]) {
         const r = await correr(ventaValidaFiltros, {pagina: 1, idVendedor});
         assert.equal(r.paso, false, 'idVendedor ' + String(idVendedor));
-        assert.equal(r.statusCode, 401);
+        assert.equal(r.statusCode, 400);
         assert.match(r.msg, /vendedor/i);
     }
 });

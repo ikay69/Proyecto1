@@ -69,7 +69,7 @@ const compraValidaDatos = async (req,res,next) => {
             });
             validarCuotasCompra(Cuotas, NumeroCuotas);
         } catch (error) {
-            return res.status(40).json({msg:String(error.message || error)});
+            return res.status(400).json({msg:String(error.message || error)});
         }
     }
 
@@ -132,10 +132,39 @@ const compraValidaDatos = async (req,res,next) => {
 };
 
 const compraValidaFiltros = async (req,res,next) => {
-    const {pagina} = req.body;
+    const {campoOrdenar, pagina, textoFiltro, idTercero} = req.body;
+
     if (!Number.isInteger(pagina)) {
         return res.status(400).json({msg:'Pagina invalida'});
     }
+
+    //campoOrdenar es OBLIGATORIO, igual que en los demas listados paginados del backend:
+    //1 NumeroDocumentoSoporte, 2 TerceroTipoDoc, 3 TerceroNumeroDoc, 4 TerceroNombre,
+    //5 FechaCreacion. El Controller es quien traduce el numero a un nombre de columna.
+    if (campoOrdenar !== 1 && campoOrdenar !== 2 && campoOrdenar !== 3 && campoOrdenar !== 4 && campoOrdenar !== 5) {
+        return res.status(400).json({msg:'Campo de orden invalido'});
+    }
+
+    //idTercero del filtro: ausente o 0 trae las compras de todos los terceros, y un id positivo
+    //solo las de ese tercero. Se rechaza null a proposito -- misma regla que el idVendedor de
+    //Ventas --: dejarlo pasar lo convertiria en "todos" sin que nadie lo haya pedido. No existe
+    //el caso -1 de Ventas porque Compras.TerceroId es NOT NULL: no hay compras sin tercero.
+    if (idTercero !== undefined) {
+        if (!Number.isInteger(idTercero) || idTercero < 0) {
+            return res.status(400).json({msg:'Tercero invalido'});
+        }
+    }
+
+    if (textoFiltro === undefined || !textoFiltro || String(textoFiltro).trim().length === 0) {
+    } else {
+        //el tope es el de la columna mas larga por la que se puede filtrar (TerceroNombre,
+        //VARCHAR(300)) recortado a 100: por encima de eso el texto ya no puede casar con nada
+        //util y solo sirve para pedir un LIKE caro.
+        if (String(textoFiltro).trim().length > 100) {
+            return res.status(400).json({msg:'Texto de filtro supera los 100 caracteres'});
+        }
+    }
+
     next();
 };
 

@@ -11,19 +11,19 @@ const cuotaValidaDatos = async (req,res,next) => {
     const {NumCuota, ValorCuota, FechaPago, Estado} = req.body;
 
     if (!Number.isInteger(NumCuota) || NumCuota < 1) {
-        return res.status(401).json({msg:'El número de cuota debe ser un entero mayor o igual a 1'});
+        return res.status(400).json({msg:'El número de cuota debe ser un entero mayor o igual a 1'});
     }
     if (isNaN(Number(ValorCuota)) || Number(ValorCuota) <= 0) {
-        return res.status(401).json({msg:'El valor de la cuota debe ser mayor a cero'});
+        return res.status(400).json({msg:'El valor de la cuota debe ser mayor a cero'});
     }
     if (FechaPago !== undefined && FechaPago !== null && FechaPago !== '') {
         if (!esFechaValida(FechaPago)) {
-            return res.status(401).json({msg:'La fecha de pago de la cuota es inválida'});
+            return res.status(400).json({msg:'La fecha de pago de la cuota es inválida'});
         }
     }
     if (Estado !== undefined && Estado !== null) {
         if (!ESTADOS_CUOTA.includes(Estado)) {
-            return res.status(401).json({msg:'El estado de la cuota debe ser PENDIENTE o CANCELADA'});
+            return res.status(400).json({msg:'El estado de la cuota debe ser PENDIENTE o CANCELADA'});
         }
     }
 
@@ -38,20 +38,20 @@ const cuotaValidaEdicion = async (req,res,next) => {
     const viene = (valor) => valor !== undefined;
 
     if (!viene(NumCuota) && !viene(ValorCuota) && !viene(FechaPago) && !viene(Estado)) {
-        return res.status(401).json({msg:'No hay nada que actualizar en la cuota'});
+        return res.status(400).json({msg:'No hay nada que actualizar en la cuota'});
     }
 
     if (viene(NumCuota) && (!Number.isInteger(NumCuota) || NumCuota < 1)) {
-        return res.status(401).json({msg:'El número de cuota debe ser un entero mayor o igual a 1'});
+        return res.status(400).json({msg:'El número de cuota debe ser un entero mayor o igual a 1'});
     }
     if (viene(ValorCuota) && (isNaN(Number(ValorCuota)) || Number(ValorCuota) <= 0)) {
-        return res.status(401).json({msg:'El valor de la cuota debe ser mayor a cero'});
+        return res.status(400).json({msg:'El valor de la cuota debe ser mayor a cero'});
     }
     if (viene(FechaPago) && FechaPago !== null && FechaPago !== '' && !esFechaValida(FechaPago)) {
-        return res.status(401).json({msg:'La fecha de pago de la cuota es inválida'});
+        return res.status(400).json({msg:'La fecha de pago de la cuota es inválida'});
     }
     if (viene(Estado) && !ESTADOS_CUOTA.includes(Estado)) {
-        return res.status(401).json({msg:'El estado de la cuota debe ser PENDIENTE o CANCELADA'});
+        return res.status(400).json({msg:'El estado de la cuota debe ser PENDIENTE o CANCELADA'});
     }
 
     next();

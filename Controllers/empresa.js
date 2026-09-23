@@ -88,7 +88,7 @@ const empresaControllers = {
         return res.status(200).json({data:empresa});
         
     } catch (error) {
-        res.status(401).json({msg:error.message || 'Error interno del servidor'})
+        res.status(400).json({msg:error.message || 'Error interno del servidor'})
     }
   },
 
@@ -155,7 +155,7 @@ const empresaControllers = {
 
         const passwordCorrecta = await bcryptjs.compareSync(passEmpresa, traeEmpresa.Pass);
         if (!passwordCorrecta) {
-            return res.status(401).json({ msg: 'Contraseña incorrecta' });
+            return res.status(400).json({ msg: 'Contraseña incorrecta' });
         }
         
         const empresa = await Empresa.cambiarClave({pNewClave:newClave,pId:idEmpresa})
@@ -193,7 +193,7 @@ const empresaControllers = {
 
         const passwordCorrecta = await bcryptjs.compareSync(passEmpresa, traeEmpresa.Pass);
         if (!passwordCorrecta) {
-            return res.status(401).json({ msg: 'Contraseña incorrecta' });
+            return res.status(400).json({ msg: 'Contraseña incorrecta' });
         }
 
         const salt2 = bcryptjs.genSaltSync(2);
@@ -255,7 +255,7 @@ const empresaControllers = {
 
         const passwordCorrecta = await bcryptjs.compareSync(passEmpresa, traeEmpresa.Pass);
         if (!passwordCorrecta) {
-            return res.status(401).json({ msg: 'Contraseña incorrecta' });
+            return res.status(400).json({ msg: 'Contraseña incorrecta' });
         }
 
         var existe = await EmpvalidarNombreEmpresa(Nombre)

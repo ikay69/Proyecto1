@@ -18,11 +18,11 @@ const ordenesProduccionControllers = {
             for (const producido of producidos) {
                 const existeArticulo = await Articulos.traerPorId({pId:producido.idArticulo, pEmpId:idEmpresa});
                 if (!existeArticulo) {
-                    return res.status(401).json({msg:`Articulo ${producido.idArticulo} inválido`});
+                    return res.status(400).json({msg:`Articulo ${producido.idArticulo} inválido`});
                 }
                 const existeBodega = await Bodegas.traerPorId({pId:producido.idBodega, pEmpId:idEmpresa});
                 if (!existeBodega || !existeBodega.bodEstado) {
-                    return res.status(401).json({msg:`Bodega ${producido.idBodega} inválida`});
+                    return res.status(400).json({msg:`Bodega ${producido.idBodega} inválida`});
                 }
             }
 
@@ -33,12 +33,12 @@ const ordenesProduccionControllers = {
             for (const consumo of consumos) {
                 const existeBodega = await Bodegas.traerPorId({pId:consumo.idBodega, pEmpId:idEmpresa});
                 if (!existeBodega || !existeBodega.bodEstado) {
-                    return res.status(401).json({msg:`Bodega ${consumo.idBodega} inválida`});
+                    return res.status(400).json({msg:`Bodega ${consumo.idBodega} inválida`});
                 }
                 if (consumo.idPropietario === undefined || consumo.idPropietario === null) continue;
                 const existePropietario = await Terceros.traerPorId({pId:consumo.idPropietario, pEmpId:idEmpresa});
                 if (!existePropietario) {
-                    return res.status(401).json({msg:`Propietario ${consumo.idPropietario} inválido`});
+                    return res.status(400).json({msg:`Propietario ${consumo.idPropietario} inválido`});
                 }
             }
 
@@ -50,7 +50,7 @@ const ordenesProduccionControllers = {
             if (ordenId > 0) {
                 return res.status(200).json({msg:'Orden de producción registrada'});
             }
-            return res.status(401).json({msg:'Error registrando la orden'});
+            return res.status(400).json({msg:'Error registrando la orden'});
         } catch (error) {
             //crearOrdenProduccion propaga Error planos con las reglas de negocio (articulo
             //inexistente, existencia insuficiente, bolsa/propietario incoherentes): son errores
@@ -83,7 +83,7 @@ const ordenesProduccionControllers = {
 
             const orden = await OrdenesProduccion.traerPorId({pEmpId:idEmpresa, pId:idOrden});
             if (!orden) {
-                return res.status(401).json({msg:'Orden inválida'});
+                return res.status(400).json({msg:'Orden inválida'});
             }
 
             //la trazabilidad de la orden vive en Movimientos: consumos (SALIDA) y producidos

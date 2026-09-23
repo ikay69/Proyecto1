@@ -59,7 +59,7 @@ const crearCompra = async ({
     //una compra de contado no guarda datos de financiacion, aunque el cliente los mande.
     //Y con varias cuotas la FechaCompromiso se descarta A PROPOSITO: con mas de una cuota las
     //fechas son de las cuotas y viven en CompraCuotas. Descartarla en silencio es preferible a
-    //un 401 por un campo que el front puede estar enviando por comodidad.
+    //un 400 por un campo que el front puede estar enviando por comodidad.
     const fechaCabecera  = (esCredito && pNumeroCuotas === 1) ? (pFechaCompromiso ?? null) : null;
     const cuotasCabecera = esCredito ? pNumeroCuotas : null;
     const valorCabecera  = (esCredito && pValorCuota !== undefined && pValorCuota !== null)

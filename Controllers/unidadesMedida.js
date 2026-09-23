@@ -24,7 +24,7 @@ const unidadesMedidaControllers = {
             if(newunidadmedida>0){
                 return res.status(200).json({msg:'Unidad de medida creada'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
 
@@ -51,7 +51,7 @@ const unidadesMedidaControllers = {
 
 
             if(!Number.isInteger(idUnidadMedida) == true){
-                return res.status(401).json({msg:'Unidad de medida invalida'});
+                return res.status(400).json({msg:'Unidad de medida invalida'});
             }
             
 
@@ -64,14 +64,14 @@ const unidadesMedidaControllers = {
 
             const existeUnidadMedida = await UnidadesMedida.traerPorId({pId:idUnidadMedida,pEmpId:idEmpresa});
             if(!existeUnidadMedida){
-                return res.status(401).json({msg:'Unidad de medida invalida'});
+                return res.status(400).json({msg:'Unidad de medida invalida'});
             }
            
             const existeNombre = await UnidadesMedida.traerPorNombre({pEmpId:idEmpresa,pNombre:vNombre});
             
             if(existeNombre){
                 if(existeNombre.Id !== idUnidadMedida){
-                    return res.status(401).json({msg:'Unidad de medida ya existe'});
+                    return res.status(400).json({msg:'Unidad de medida ya existe'});
                 }
             }
 
@@ -82,7 +82,7 @@ const unidadesMedidaControllers = {
             if(updateUnidadMedida > 0){
                 return res.status(200).json({msg:'Unidad de medida actualizada'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
 

@@ -20,12 +20,12 @@ const tercerosControllers = {
             //si viene el tipo de documento se valida que exista
             if(vTipoDocumento !== null){
                 if(!Number.isInteger(vTipoDocumento) == true){
-                    return res.status(401).json({msg:'Tipo de documento invalido'});
+                    return res.status(400).json({msg:'Tipo de documento invalido'});
                 }
 
                 const existeTipoDocumento = await TiposDocumento.traerPorId({pId:vTipoDocumento,pEmpId:idEmpresa});
                 if(!existeTipoDocumento){
-                    return res.status(401).json({msg:'Tipo de documento invalido'});
+                    return res.status(400).json({msg:'Tipo de documento invalido'});
                 }
             }
 
@@ -52,7 +52,7 @@ const tercerosControllers = {
             if(newTercero>0){
                 return res.status(200).json({msg:'Tercero creado'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
         } catch (error) {
@@ -77,28 +77,28 @@ const tercerosControllers = {
             var vEstado = (Estado === undefined) ? true : (Estado == true);
 
             if(!Number.isInteger(idTercero) == true){
-                return res.status(401).json({msg:'Tercero invalido'});
+                return res.status(400).json({msg:'Tercero invalido'});
             }
 
             const existeTercero = await Terceros.traerPorId({pId:idTercero,pEmpId:idEmpresa});
             if(!existeTercero){
-                return res.status(401).json({msg:'Tercero invalido'});
+                return res.status(400).json({msg:'Tercero invalido'});
             }
 
             if(vTipoDocumento !== null){
                 if(!Number.isInteger(vTipoDocumento) == true){
-                    return res.status(401).json({msg:'Tipo de documento invalido'});
+                    return res.status(400).json({msg:'Tipo de documento invalido'});
                 }
 
                 const existeTipoDocumento = await TiposDocumento.traerPorId({pId:vTipoDocumento,pEmpId:idEmpresa});
                 if(!existeTipoDocumento){
-                    return res.status(401).json({msg:'Tipo de documento invalido'});
+                    return res.status(400).json({msg:'Tipo de documento invalido'});
                 }
                
                 // si no se acutaliza tipo documento no validarlo
                 if(existeTercero.terTipDocId !== vTipoDocumento){
                     if (existeTipoDocumento.tipDocEstado == 0) {
-                         return res.status(401).json({msg:'Tipo de documento inactivo'});
+                         return res.status(400).json({msg:'Tipo de documento inactivo'});
                     }
                 }
             }
@@ -107,7 +107,7 @@ const tercerosControllers = {
                 const existe = await Terceros.traerPorTipoYNumero({pEmpId:idEmpresa,pTipoDocumento:vTipoDocumento,pNumeroDocumento:vNumeroDocumento});
                 if(existe){
                     if(existe.Id !== idTercero){
-                        return res.status(401).json({msg:'Ya existe un tercero con ese tipo y número de documento'});
+                        return res.status(400).json({msg:'Ya existe un tercero con ese tipo y número de documento'});
                     }
                 }
             }
@@ -128,7 +128,7 @@ const tercerosControllers = {
             if(updateTercero > 0){
                 return res.status(200).json({msg:'Tercero actualizado'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
         } catch (error) {

@@ -32,18 +32,18 @@ const articulosControllers = {
             const UsuIdLogin = req.usuario.Id;
 
             if (!Number.isInteger(idProducto)) {
-                return res.status(401).json({msg:'Producto inválido'});
+                return res.status(400).json({msg:'Producto inválido'});
             }
 
             //el producto debe existir y ser de la misma empresa del token
             const existeProducto = await Productos.traerPorId({pId:idProducto,pEmpId:idEmpresa});
             if (!existeProducto) {
-                return res.status(401).json({msg:'Producto inválido'});
+                return res.status(400).json({msg:'Producto inválido'});
             }
 
             const errorPropiedades = await validarPropiedadesArticulo(idEmpresa, Propiedades);
             if (errorPropiedades) {
-                return res.status(401).json({msg:errorPropiedades});
+                return res.status(400).json({msg:errorPropiedades});
             }
 
             const nuevoId = await Articulos.crear({
@@ -59,7 +59,7 @@ const articulosControllers = {
             if (nuevoId > 0) {
                 return res.status(200).json({msg:'Articulo creado'});
             }
-            return res.status(401).json({msg:'Error en inserción'});
+            return res.status(400).json({msg:'Error en inserción'});
         } catch (error) {
             return res.status(500).json({msg:String(error)});
         }
@@ -73,27 +73,27 @@ const articulosControllers = {
             const vDescripcion = String(Descripcion ?? '').trim();
 
             if (!Number.isInteger(idArticulo)) {
-                return res.status(401).json({msg:'Articulo inválido'});
+                return res.status(400).json({msg:'Articulo inválido'});
             }
             if (!Number.isInteger(idProducto)) {
-                return res.status(401).json({msg:'Producto inválido'});
+                return res.status(400).json({msg:'Producto inválido'});
             }
 
             //sin esta comprobacion un idArticulo de otra empresa igual llegaria a
             //ArticuloPropiedades.reemplazarValores y escribiria filas ajenas
             const existeArticulo = await Articulos.traerPorId({pId:idArticulo,pEmpId:idEmpresa});
             if (!existeArticulo) {
-                return res.status(401).json({msg:'Articulo inválido'});
+                return res.status(400).json({msg:'Articulo inválido'});
             }
 
             const existeProducto = await Productos.traerPorId({pId:idProducto,pEmpId:idEmpresa});
             if (!existeProducto) {
-                return res.status(401).json({msg:'Producto inválido'});
+                return res.status(400).json({msg:'Producto inválido'});
             }
 
             const errorPropiedades = await validarPropiedadesArticulo(idEmpresa, Propiedades);
             if (errorPropiedades) {
-                return res.status(401).json({msg:errorPropiedades});
+                return res.status(400).json({msg:errorPropiedades});
             }
 
             const filasActualizadas = await Articulos.editar({
@@ -111,7 +111,7 @@ const articulosControllers = {
             if (filasActualizadas > 0) {
                 return res.status(200).json({msg:'Articulo actualizado'});
             }
-            return res.status(401).json({msg:'Error en actualización'});
+            return res.status(400).json({msg:'Error en actualización'});
         } catch (error) {
             return res.status(500).json({msg:String(error)});
         }
@@ -125,20 +125,20 @@ const articulosControllers = {
             const {idEmpresa, idBodega, idArticulo, nuevoCosto} = req.body;
 
             if (!Number.isInteger(idArticulo)) {
-                return res.status(401).json({msg:'Articulo inválido'});
+                return res.status(400).json({msg:'Articulo inválido'});
             }
             if (!Number.isInteger(idBodega)) {
-                return res.status(401).json({msg:'Bodega inválida'});
+                return res.status(400).json({msg:'Bodega inválida'});
             }
 
             const existeArticulo = await Articulos.traerPorId({pId:idArticulo,pEmpId:idEmpresa});
             if (!existeArticulo) {
-                return res.status(401).json({msg:'Articulo inválido'});
+                return res.status(400).json({msg:'Articulo inválido'});
             }
 
             const existeBodega = await Bodegas.traerPorId({pId:idBodega,pEmpId:idEmpresa});
             if (!existeBodega || !existeBodega.bodEstado) {
-                return res.status(401).json({msg:'Bodega inválida'});
+                return res.status(400).json({msg:'Bodega inválida'});
             }
 
             await Existencias.editarCosto({
@@ -234,7 +234,7 @@ const articulosControllers = {
 
             const articulo = await Articulos.traerPorId({pId:idArticulo,pEmpId:idEmpresa});
             if (!articulo) {
-                return res.status(401).json({msg:'Articulo inválido'});
+                return res.status(400).json({msg:'Articulo inválido'});
             }
 
             const propiedades = await ArticuloPropiedades.traerPorArticulo({pEmpId:idEmpresa,pArticuloId:idArticulo});

@@ -22,7 +22,7 @@ const tiposProductoControllers = {
             if(newTipoProducto>0){
                 return res.status(200).json({msg:'Tipo de producto creado'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
         } catch (error) {
@@ -42,7 +42,7 @@ const tiposProductoControllers = {
             vNombre = vNombre.toUpperCase().trim();
 
             if(!Number.isInteger(idTipoProducto) == true){
-                return res.status(401).json({msg:'Tipo de producto invalido'});
+                return res.status(400).json({msg:'Tipo de producto invalido'});
             }
 
             if(Estado == true){
@@ -54,14 +54,14 @@ const tiposProductoControllers = {
 
             const existeTipoProducto = await TiposProducto.traerPorId({pId:idTipoProducto,pEmpId:idEmpresa});
             if(!existeTipoProducto){
-                return res.status(401).json({msg:'Tipo de producto invalido'});
+                return res.status(400).json({msg:'Tipo de producto invalido'});
             }
 
             const existeNombre = await TiposProducto.traerPorNombre({pEmpId:idEmpresa,pNombre:vNombre});
 
             if(existeNombre){
                 if(existeNombre.Id !== idTipoProducto){
-                    return res.status(401).json({msg:'Tipo de producto ya existe'});
+                    return res.status(400).json({msg:'Tipo de producto ya existe'});
                 }
             }
 
@@ -70,7 +70,7 @@ const tiposProductoControllers = {
             if(updateTipoProducto > 0){
                 return res.status(200).json({msg:'Tipo de producto actualizado'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
         } catch (error) {

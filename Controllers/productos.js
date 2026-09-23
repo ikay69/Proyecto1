@@ -20,31 +20,31 @@ const productosControllers = {
             vDescripcion = vDescripcion.trim();
 
             if(!Number.isInteger(idTipoProducto) == true){
-                return res.status(401).json({msg:'Tipo de producto invalido'});
+                return res.status(400).json({msg:'Tipo de producto invalido'});
             }
 
             if(!Number.isInteger(idCategoria) == true){
-                return res.status(401).json({msg:'Categoria invalida'});
+                return res.status(400).json({msg:'Categoria invalida'});
             }
 
             if(!Number.isInteger(idUnidadMedida) == true){
-                return res.status(401).json({msg:'Unidad de medida invalida'});
+                return res.status(400).json({msg:'Unidad de medida invalida'});
             }
 
             //se valida que las referencias existan y pertenezcan a la misma empresa
             const existeTipoProducto = await TiposProducto.traerPorId({pId:idTipoProducto,pEmpId:idEmpresa});
             if(!existeTipoProducto){
-                return res.status(401).json({msg:'Tipo de producto invalido'});
+                return res.status(400).json({msg:'Tipo de producto invalido'});
             }
 
             const existeCategoria = await Categorias.traerPorId({pId:idCategoria,pEmpId:idEmpresa});
             if(!existeCategoria){
-                return res.status(401).json({msg:'Categoria invalida'});
+                return res.status(400).json({msg:'Categoria invalida'});
             }
 
             const existeUnidadMedida = await UnidadesMedida.traerPorId({pId:idUnidadMedida,pEmpId:idEmpresa});
             if(!existeUnidadMedida){
-                return res.status(401).json({msg:'Unidad de medida invalida'});
+                return res.status(400).json({msg:'Unidad de medida invalida'});
             }
 
             const existe = await Productos.traerPorNombre({pEmpId:idEmpresa,pNombre:vNombre});
@@ -66,7 +66,7 @@ const productosControllers = {
             if(newProducto>0){
                 return res.status(200).json({msg:'Producto creado'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
         } catch (error) {
@@ -93,19 +93,19 @@ const productosControllers = {
        
 
             if(!Number.isInteger(idProducto) == true){
-                return res.status(401).json({msg:'Producto invalido'});
+                return res.status(400).json({msg:'Producto invalido'});
             }
 
             if(!Number.isInteger(idTipoProducto) == true){
-                return res.status(401).json({msg:'Tipo de producto invalido'});
+                return res.status(400).json({msg:'Tipo de producto invalido'});
             }
 
             if(!Number.isInteger(idCategoria) == true){
-                return res.status(401).json({msg:'Categoria invalida'});
+                return res.status(400).json({msg:'Categoria invalida'});
             }
 
             if(!Number.isInteger(idUnidadMedida) == true){
-                return res.status(401).json({msg:'Unidad de medida invalida'});
+                return res.status(400).json({msg:'Unidad de medida invalida'});
             }
 
             if(Estado == true){
@@ -116,41 +116,41 @@ const productosControllers = {
 
             const existeProducto = await Productos.traerPorId({pId:idProducto,pEmpId:idEmpresa});
             if(!existeProducto){
-                return res.status(401).json({msg:'Producto invalido'});
+                return res.status(400).json({msg:'Producto invalido'});
             }
             
 
             const existeTipoProducto = await TiposProducto.traerPorId({pId:idTipoProducto,pEmpId:idEmpresa});
             if(!existeTipoProducto){
-                return res.status(401).json({msg:'Tipo de producto invalido'});
+                return res.status(400).json({msg:'Tipo de producto invalido'});
             }
 
             if(existeProducto.proTipoProductoId !== idTipoProducto){
                 if(existeTipoProducto.tipProEstado !== true){
-                    return res.status(401).json({msg:'Producto inactivo'});
+                    return res.status(400).json({msg:'Producto inactivo'});
                 }
             }
            
 
             const existeCategoria = await Categorias.traerPorId({pId:idCategoria,pEmpId:idEmpresa});
             if(!existeCategoria){
-                return res.status(401).json({msg:'Categoria invalida'});
+                return res.status(400).json({msg:'Categoria invalida'});
             }
 
             if(existeProducto.proCategoriaId !== idCategoria){
                 if(existeCategoria.catEstado !== true){
-                    return res.status(401).json({msg:'Categoria inactivo'});
+                    return res.status(400).json({msg:'Categoria inactivo'});
                 }
             }
 
             const existeUnidadMedida = await UnidadesMedida.traerPorId({pId:idUnidadMedida,pEmpId:idEmpresa});
             if(!existeUnidadMedida){
-                return res.status(401).json({msg:'Unidad de medida invalida'});
+                return res.status(400).json({msg:'Unidad de medida invalida'});
             }
 
             if(existeProducto.proUnidadMedidaId !== idUnidadMedida){
                 if(existeUnidadMedida.uniMedEstado !== true){
-                    return res.status(401).json({msg:'Unidad de medida inactivo'});
+                    return res.status(400).json({msg:'Unidad de medida inactivo'});
                 }
             }
 
@@ -160,7 +160,7 @@ const productosControllers = {
 
             if(existeNombre){
                 if(existeNombre.Id !== idProducto){
-                    return res.status(401).json({msg:'Producto ya existe'});
+                    return res.status(400).json({msg:'Producto ya existe'});
                 }
             }
 
@@ -179,7 +179,7 @@ const productosControllers = {
             if(updateProducto > 0){
                 return res.status(200).json({msg:'Producto actualizado'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
         } catch (error) {

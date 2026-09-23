@@ -11,11 +11,11 @@ const usuariosEmpresaControllers = {
             //console.log('control usuarioempresa crear 8 emp ',idEmpresa,' usu ',idUsuario);
             
             if(!Number.isInteger(idEmpresa) == true){
-                return res.status(401).json({msg:'empresa invalida'});
+                return res.status(400).json({msg:'empresa invalida'});
             }
 
             if(!Number.isInteger(idUsuario) == true){
-                return res.status(401).json({msg:'Usuario invalida'});
+                return res.status(400).json({msg:'Usuario invalida'});
             }
             
             
@@ -24,17 +24,17 @@ const usuariosEmpresaControllers = {
             const empresaLogin = req.empresa.Id;
 
             if(usuarioLoginRol !== 'ADMINISTRADOR'){
-                return res.status(401).json({msg:'Usuario sin permiso'});
+                return res.status(400).json({msg:'Usuario sin permiso'});
             }
           
             var validacion = await usuEmpExisteRelacion({pEmpId:idEmpresa,pUsuId:usuarioLoginId});
             if(!validacion){
-                return res.status(401).json({msg:validacion});
+                return res.status(400).json({msg:validacion});
             }
             
             const existeRelacionNew = await UsuariosEmpresa.validarRelacion({pEmpresaId:idEmpresa,pUsuarioId:idUsuario});
             if(existeRelacionNew){
-                return res.status(401).json({ msg: 'Usuario ya tiene relacion' });
+                return res.status(400).json({ msg: 'Usuario ya tiene relacion' });
             }
            
             //console.log('control usuarioempresa crear 27');
@@ -58,12 +58,12 @@ const usuariosEmpresaControllers = {
             const empresaLoginId = req.empresa.Id;
 
             if(usuarioLoginRol !== 'ADMINISTRADOR'){
-                return res.status(401).json({msg:'Usuario sin permiso'});
+                return res.status(400).json({msg:'Usuario sin permiso'});
             }
 
             var validacion = await usuEmpExisteRelacion({pEmpId:idEmpresa,pUsuId:usuarioLoginId});
             if(!validacion){
-                return res.status(401).json({msg:validacion});
+                return res.status(400).json({msg:validacion});
             }
 
             const usuarios = await UsuariosEmpresa.usuariosSinMiEmpresa({pEmpresaId:idEmpresa});

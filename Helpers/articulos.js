@@ -31,7 +31,7 @@ const validarDatosArticulo = ({Nombre, Descripcion, PrecioVentaUnitario, Propied
         }
         for (const prop of Propiedades) {
             //sin este guarda, un elemento null/primitivo haria estallar el acceso a
-            //prop.idPropiedad y la ruta respondería 500 en vez de un 401 de validacion
+            //prop.idPropiedad y la ruta respondería 500 en vez de un 400 de validacion
             if (prop === null || typeof prop !== 'object' || Array.isArray(prop)) {
                 return 'idPropiedad inválido en Propiedades';
             }
@@ -53,7 +53,7 @@ const validarDatosArticulo = ({Nombre, Descripcion, PrecioVentaUnitario, Propied
 const articuloValidaDatos = async (req,res,next) => {
     const error = validarDatosArticulo(req.body);
     if (error) {
-        return res.status(401).json({msg:error});
+        return res.status(400).json({msg:error});
     }
     next();
 };
@@ -64,13 +64,13 @@ const articuloValidaFiltros = async (req,res,next) => {
     const {campoOrdenar, pagina, textoFiltro} = req.body;
 
     if (!Number.isInteger(pagina)) {
-        return res.status(401).json({msg:'Pagina invalida'});
+        return res.status(400).json({msg:'Pagina invalida'});
     }
     if (!CAMPOS_ORDENAR_VALIDOS.includes(campoOrdenar)) {
-        return res.status(401).json({msg:'Campo de orden invalido'});
+        return res.status(400).json({msg:'Campo de orden invalido'});
     }
     if (textoFiltro !== undefined && textoFiltro !== null && String(textoFiltro).trim().length > 150) {
-        return res.status(401).json({msg:'Texto de filtro supera los 150 caracteres'});
+        return res.status(400).json({msg:'Texto de filtro supera los 150 caracteres'});
     }
 
     next();
@@ -80,10 +80,10 @@ const articuloValidaCosto = async (req,res,next) => {
     const {idBodega, nuevoCosto} = req.body;
 
     if (!Number.isInteger(idBodega)) {
-        return res.status(401).json({msg:'Bodega inválida'});
+        return res.status(400).json({msg:'Bodega inválida'});
     }
     if (nuevoCosto === undefined || nuevoCosto === null || isNaN(Number(nuevoCosto)) || Number(nuevoCosto) <= 0) {
-        return res.status(401).json({msg:'El nuevo costo debe ser un número mayor a cero'});
+        return res.status(400).json({msg:'El nuevo costo debe ser un número mayor a cero'});
     }
 
     next();

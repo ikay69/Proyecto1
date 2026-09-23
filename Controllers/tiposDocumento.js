@@ -24,7 +24,7 @@ const tiposDocumentoControllers = {
             if(newTipoDocumento>0){
                 return res.status(200).json({msg:'Tipo de documento creado'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
         } catch (error) {
@@ -46,7 +46,7 @@ const tiposDocumentoControllers = {
             vDescripcion = vDescripcion.toUpperCase().trim();
 
             if(!Number.isInteger(idTipoDocumento) == true){
-                return res.status(401).json({msg:'Tipo de documento invalido'});
+                return res.status(400).json({msg:'Tipo de documento invalido'});
             }
 
             if(Estado == true){
@@ -57,14 +57,14 @@ const tiposDocumentoControllers = {
 
             const existeTipoDocumento = await TiposDocumento.traerPorId({pId:idTipoDocumento,pEmpId:idEmpresa});
             if(!existeTipoDocumento){
-                return res.status(401).json({msg:'Tipo de documento invalido'});
+                return res.status(400).json({msg:'Tipo de documento invalido'});
             }
 
             const existeAbreviatura = await TiposDocumento.traerPorAbreviatura({pEmpId:idEmpresa,pAbreviatura:vAbreviatura});
 
             if(existeAbreviatura){
                 if(existeAbreviatura.Id !== idTipoDocumento){
-                    return res.status(401).json({msg:'Tipo de documento ya existe'});
+                    return res.status(400).json({msg:'Tipo de documento ya existe'});
                 }
             }
 
@@ -73,7 +73,7 @@ const tiposDocumentoControllers = {
             if(updateTipoDocumento > 0){
                 return res.status(200).json({msg:'Tipo de documento actualizado'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
         } catch (error) {
@@ -173,7 +173,7 @@ const tiposDocumentoControllers = {
             if(tipoDocumento){
                 return res.status(200).json({data:tipoDocumento});
             }else{
-               return res.status(401).json({msg:"Tipo de documento no existe"});
+               return res.status(400).json({msg:"Tipo de documento no existe"});
             }
             
         } catch (error) {

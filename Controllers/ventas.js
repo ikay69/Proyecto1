@@ -24,7 +24,7 @@ const ventasControllers = {
 
             const tercero = await Terceros.traerPorId({pId:idTercero, pEmpId:idEmpresa});
             if (!tercero || !tercero.terEstado) {
-                return res.status(401).json({msg:'Tercero inválido'});
+                return res.status(400).json({msg:'Tercero inválido'});
             }
 
             //el vendedor es opcional (VendedorId es NULL-able). Si viene, se valida ANTES del
@@ -35,7 +35,7 @@ const ventasControllers = {
             if (idVendedor !== undefined && idVendedor !== null) {
                 const vendedor = await Vendedores.traerPorId({pId:idVendedor, pEmpId:idEmpresa});
                 if (!vendedor || !vendedor.vdrEstado) {
-                    return res.status(401).json({msg:'Vendedor inválido'});
+                    return res.status(400).json({msg:'Vendedor inválido'});
                 }
                 vVendedorId = idVendedor;
             }
@@ -59,12 +59,12 @@ const ventasControllers = {
             for (const item of articulosBody) {
                 const articulo = await Articulos.traerPorId({pId:item.idArticulo, pEmpId:idEmpresa});
                 if (!articulo || !articulo.artEstado || !articulo.artVender) {
-                    return res.status(401).json({msg:`Articulo ${item.idArticulo} no disponible para la venta`});
+                    return res.status(400).json({msg:`Articulo ${item.idArticulo} no disponible para la venta`});
                 }
 
                 const bodega = await Bodegas.traerPorId({pId:item.idBodega, pEmpId:idEmpresa});
                 if (!bodega || !bodega.bodEstado) {
-                    return res.status(401).json({msg:`Bodega ${item.idBodega} inválida`});
+                    return res.status(400).json({msg:`Bodega ${item.idBodega} inválida`});
                 }
 
                 const bolsaDisponible = await Existencias.traerBolsa({
@@ -101,7 +101,7 @@ const ventasControllers = {
             if (ventaId > 0) {
                 return res.status(200).json({msg:'Venta registrada', idVenta: ventaId});
             }
-            return res.status(401).json({msg:'Error registrando la venta'});
+            return res.status(400).json({msg:'Error registrando la venta'});
         } catch (error) {
             //crearVentaContado y sus funciones de calculo propagan Error planos con reglas de
             //negocio (saldo distinto de cero, articulo repetido con precios distintos,
@@ -139,7 +139,7 @@ const ventasControllers = {
 
             const venta = await Ventas.traerPorId({pEmpId:idEmpresa, pId:idVenta});
             if (!venta) {
-                return res.status(401).json({msg:'Venta inválida'});
+                return res.status(400).json({msg:'Venta inválida'});
             }
 
             const lineas = await VentaDetalles.traerPorVenta({pEmpId:idEmpresa, pVentaId:idVenta});

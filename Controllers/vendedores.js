@@ -22,7 +22,7 @@ const vendedoresControllers = {
             if(newVendedor>0){
                 return res.status(200).json({msg:'Vendedor creado'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
         } catch (error) {
@@ -42,7 +42,7 @@ const vendedoresControllers = {
             vNombre = vNombre.toUpperCase().trim();
 
             if(!Number.isInteger(idVendedor) == true){
-                return res.status(401).json({msg:'Vendedor invalido'});
+                return res.status(400).json({msg:'Vendedor invalido'});
             }
 
             if(Estado == true){
@@ -53,14 +53,14 @@ const vendedoresControllers = {
 
             const existeVendedor = await Vendedores.traerPorId({pId:idVendedor,pEmpId:idEmpresa});
             if(!existeVendedor){
-                return res.status(401).json({msg:'Vendedor invalido'});
+                return res.status(400).json({msg:'Vendedor invalido'});
             }
 
             const existeNombre = await Vendedores.traerPorNombre({pEmpId:idEmpresa,pNombre:vNombre});
 
             if(existeNombre){
                 if(existeNombre.Id !== idVendedor){
-                    return res.status(401).json({msg:'Vendedor ya existe'});
+                    return res.status(400).json({msg:'Vendedor ya existe'});
                 }
             }
 
@@ -69,7 +69,7 @@ const vendedoresControllers = {
             if(updateVendedor > 0){
                 return res.status(200).json({msg:'Vendedor actualizado'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
         } catch (error) {
@@ -111,16 +111,16 @@ const vendedoresControllers = {
             //valor se compara contra la columna Estado, que es booleana.
             switch (estadoFiltro) {
                 case 1:
-                    vEstado = 1;
+                    vEstado = 1;  //activo
                     break;
                 case 2:
-                    vEstado = 0;
+                    vEstado = 0; // inactivo
                     break;
                 default:
-                    vEstado = -1;
+                    vEstado = -1; //todos
                     break;
             }
-
+            
             //el campo que selecciona para ordenar es el mismo que usa para filtrar los registros que tengan caracteres iguales a los de textoFiltro
             //la fecha no es texto por eso se invalida
             if (campoOrdenar == 2){
@@ -182,7 +182,7 @@ const vendedoresControllers = {
             if(vendedor){
                 return res.status(200).json({data:vendedor});
             }else{
-                return res.status(401).json({data:"Vendedor no existe"});
+                return res.status(400).json({data:"Vendedor no existe"});
             }
         } catch (error) {
             let mensaje = String(error)

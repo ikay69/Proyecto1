@@ -22,7 +22,7 @@ const bodegasControllers = {
             if(newBodega>0){
                 return res.status(200).json({msg:'Bodega creada'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
         } catch (error) {
@@ -42,7 +42,7 @@ const bodegasControllers = {
             vNombre = vNombre.toUpperCase().trim();
 
             if(!Number.isInteger(idBodega) == true){
-                return res.status(401).json({msg:'Bodega invalida'});
+                return res.status(400).json({msg:'Bodega invalida'});
             }
 
             if(Estado == true){
@@ -53,14 +53,14 @@ const bodegasControllers = {
 
             const existeBodega = await Bodegas.traerPorId({pId:idBodega,pEmpId:idEmpresa});
             if(!existeBodega){
-                return res.status(401).json({msg:'Bodega invalida'});
+                return res.status(400).json({msg:'Bodega invalida'});
             }
 
             const existeNombre = await Bodegas.traerPorNombre({pEmpId:idEmpresa,pNombre:vNombre});
 
             if(existeNombre){
                 if(existeNombre.Id !== idBodega){
-                    return res.status(401).json({msg:'Bodega ya existe'});
+                    return res.status(400).json({msg:'Bodega ya existe'});
                 }
             }
 
@@ -69,7 +69,7 @@ const bodegasControllers = {
             if(updateBodega > 0){
                 return res.status(200).json({msg:'Bodega actualizada'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
         } catch (error) {
@@ -166,7 +166,7 @@ const bodegasControllers = {
             if(bodega){
                 return res.status(200).json({data:bodega});
             }else{
-                return res.status(401).json({data:"Bodega no existe"});
+                return res.status(400).json({data:"Bodega no existe"});
             }
         } catch (error) {
             let mensaje = String(error)

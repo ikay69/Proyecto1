@@ -1,0 +1,1 @@
+import{h as t}from"./http-saiwtclL.js";const o={getAll(e){return t.post("/bodega/getallbodega",e)},create(e){return t.post("/bodega/newbodega",e)},getById(e){return t.post("/bodega/getidbodega",e)},update(e){return t.put("/bodega/updatebodega",e)},getActivas(e){return t.post("/bodega/getactivasbodega",e)}};export{o as b};

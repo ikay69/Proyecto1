@@ -39,7 +39,7 @@ const usuarioControllers = {
 
             const usuarioExiste = await Usuario.buscarPorUsername(pUserName);
             if (usuarioExiste) {
-                return res.status(401).json({mag:'Usuario, ya existe'} );
+                return res.status(400).json({mag:'Usuario, ya existe'} );
             }
 
 
@@ -57,7 +57,7 @@ const usuarioControllers = {
                 return res.status(200).json({ msg: mensaje});
             }else{
                 let mensaje = 'Error en la operación';
-                return res.status(401).json({ msg: mensaje});
+                return res.status(400).json({ msg: mensaje});
             }
 
         } catch (error) {
@@ -129,20 +129,20 @@ const usuarioControllers = {
             
             const usuarioCambiarPass = await Usuario.buscarPorId(idUsuario);
             if(!usuarioCambiarPass){
-                return res.status(401).json({msg:'usuario invalido'});
+                return res.status(400).json({msg:'usuario invalido'});
             }
             
             // si el usuario logueado no es admnistrador y no es el mismo a cambiar la contraseña, no lo dejara
             
             if (usuarioRolLogin !== 'ADMINISTRADOR' && usuarioLogin !== idUsuario){
-                return res.status(401).json({msg:'No tiene permisos'})
+                return res.status(400).json({msg:'No tiene permisos'})
             }
             
 
             if (usuarioRolLogin !== 'ADMINISTRADOR'  && usuarioLogin === idUsuario){
                 const passwordCorrecta = await bcryptjs.compareSync(vPass, usuarioCambiarPass.Pass);
                 if (!passwordCorrecta) {
-                    return res.status(401).json({ msg: 'Contraseña incorrectos' });
+                    return res.status(400).json({ msg: 'Contraseña incorrectos' });
                 }
             }
 
@@ -155,7 +155,7 @@ const usuarioControllers = {
             return res.status(201).json({msg:'contraseña actualizada'})
 
         } catch (error) {
-            res.status(401).json({ msg: error.message || 'Error interno del servidor'});
+            res.status(400).json({ msg: error.message || 'Error interno del servidor'});
         }
     },
 
@@ -165,7 +165,7 @@ const usuarioControllers = {
             const {idEmpresa,idUsuario,nombres,apellidos,user,rol,estado} = req.body;
 
             if(!Number.isInteger(idUsuario) == true){
-                return res.status(401).json({msg:'Usuario invalida'});
+                return res.status(400).json({msg:'Usuario invalida'});
             }
 
             var empresaIdLogin = req.empresa.Id
@@ -189,7 +189,7 @@ const usuarioControllers = {
 
             const usuarioCambiarDatos = await Usuario.buscarPorId(idUsuario);
             if(!usuarioCambiarDatos){
-                return res.status(401).json({msg:'usuario invalido'});
+                return res.status(400).json({msg:'usuario invalido'});
             }
 
 
@@ -213,7 +213,7 @@ const usuarioControllers = {
                 const validarCantAdmin =  await UsuariosEmpresa.cantUsuariosAdminActivos({pEmpresa:idEmpresa});
                 
                 if(validarCantAdmin < 2){
-                    return res.status(401).json({msg:'operacon invalida empresa sin suficientes usuarios'})
+                    return res.status(400).json({msg:'operacon invalida empresa sin suficientes usuarios'})
                 }
             }
 
@@ -222,7 +222,7 @@ const usuarioControllers = {
             return res.status(201).json({msg:'Datos actualizados'})
         } catch (error) {
             let mensaje = 'Error en la operación' + String(error);
-            res.status(401).json({ msg: mensaje});
+            res.status(400).json({ msg: mensaje});
         }
     },
 

@@ -30,12 +30,12 @@ const movimientosControllers = {
             //movimientos y moveria existencias ajenas
             const existeArticulo = await Articulos.traerPorId({pId:idArticulo, pEmpId:idEmpresa});
             if (!existeArticulo) {
-                return res.status(401).json({msg:'Articulo inválido'});
+                return res.status(400).json({msg:'Articulo inválido'});
             }
 
             const existeBodega = await Bodegas.traerPorId({pId:idBodega, pEmpId:idEmpresa});
             if (!existeBodega || !existeBodega.bodEstado) {
-                return res.status(401).json({msg:'Bodega inválida'});
+                return res.status(400).json({msg:'Bodega inválida'});
             }
 
             //el propietario tambien se valida contra la empresa del token: sin esto, la bolsa
@@ -44,11 +44,11 @@ const movimientosControllers = {
                 const existePropietario = await Terceros.traerPorId({pId:idPropietario, pEmpId:idEmpresa});
                 
                 if (!existePropietario) {
-                    return res.status(401).json({msg:'Propietario inválido'});
+                    return res.status(400).json({msg:'Propietario inválido'});
                 }
 
                 if(!existePropietario.terEstado){
-                    return res.status(401).json({msg:'Propietario inactivo'});
+                    return res.status(400).json({msg:'Propietario inactivo'});
                 }
             }
 
@@ -71,7 +71,7 @@ const movimientosControllers = {
             if (movimientoId > 0) {
                 return res.status(200).json({msg:'Movimiento registrado'});
             }
-            return res.status(401).json({msg:'Error registrando el movimiento'});
+            return res.status(400).json({msg:'Error registrando el movimiento'});
         } catch (error) {
             //registrarMovimiento lanza Error planos con las reglas de negocio
             //(existencia insuficiente, propietario/bolsa incoherentes): son errores del

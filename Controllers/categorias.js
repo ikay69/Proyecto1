@@ -22,7 +22,7 @@ const categoriasControllers = {
             if(newCategoria>0){
                 return res.status(200).json({msg:'Categoria creada'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
         } catch (error) {
@@ -42,7 +42,7 @@ const categoriasControllers = {
             vNombre = vNombre.toUpperCase().trim();
 
             if(!Number.isInteger(idCategoria) == true){
-                return res.status(401).json({msg:'Categoria invalida'});
+                return res.status(400).json({msg:'Categoria invalida'});
             }
 
             if(Estado == true){
@@ -53,14 +53,14 @@ const categoriasControllers = {
 
             const existeCategoria = await Categorias.traerPorId({pId:idCategoria,pEmpId:idEmpresa});
             if(!existeCategoria){
-                return res.status(401).json({msg:'Categoria invalida'});
+                return res.status(400).json({msg:'Categoria invalida'});
             }
 
             const existeNombre = await Categorias.traerPorNombre({pEmpId:idEmpresa,pNombre:vNombre});
 
             if(existeNombre){
                 if(existeNombre.Id !== idCategoria){
-                    return res.status(401).json({msg:'Categoria ya existe'});
+                    return res.status(400).json({msg:'Categoria ya existe'});
                 }
             }
 
@@ -69,7 +69,7 @@ const categoriasControllers = {
             if(updateCategoria > 0){
                 return res.status(200).json({msg:'Categoria actualizada'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
         } catch (error) {
@@ -166,7 +166,7 @@ const categoriasControllers = {
             if(categoria){
                 return res.status(200).json({data:categoria});
             }else{
-                return res.status(401).json({data:"Categoría no existe"});
+                return res.status(400).json({data:"Categoría no existe"});
             }
         } catch (error) {
             let mensaje = String(error)

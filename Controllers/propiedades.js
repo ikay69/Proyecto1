@@ -24,7 +24,7 @@ const propiedadesControllers = {
             if(newPropiedad>0){
                 return res.status(200).json({msg:'Propiedad creada'});
             }else{
-                return res.status(401).json({msg:'Error en insersión'});
+                return res.status(400).json({msg:'Error en insersión'});
             }
 
         } catch (error) {
@@ -46,7 +46,7 @@ const propiedadesControllers = {
             vTipoDato = vTipoDato.toUpperCase().trim();
 
             if(!Number.isInteger(idPropiedad) == true){
-                return res.status(401).json({msg:'Propiedad invalida'});
+                return res.status(400).json({msg:'Propiedad invalida'});
             }
 
             if(Estado == true){
@@ -57,14 +57,14 @@ const propiedadesControllers = {
 
             const existePropiedad = await Propiedades.traerPorId({pId:idPropiedad,pEmpId:idEmpresa});
             if(!existePropiedad){
-                return res.status(401).json({msg:'Propiedad invalida'});
+                return res.status(400).json({msg:'Propiedad invalida'});
             }
 
             const existeNombre = await Propiedades.traerPorNombre({pEmpId:idEmpresa,pNombre:vNombre});
 
             if(existeNombre){
                 if(existeNombre.Id !== idPropiedad){
-                    return res.status(401).json({msg:'Propiedad ya existe'});
+                    return res.status(400).json({msg:'Propiedad ya existe'});
                 }
             }
 
@@ -73,7 +73,7 @@ const propiedadesControllers = {
             if(updatePropiedad > 0){
                 return res.status(200).json({msg:'Propiedad actualizada'});
             }else{
-                return res.status(401).json({msg:'Error en actualización'});
+                return res.status(400).json({msg:'Error en actualización'});
             }
 
         } catch (error) {

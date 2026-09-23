@@ -46,7 +46,7 @@ const normalizarFecha = (valor) => {
     return `${anio}-${mes}-${dia} ${hora}:${minuto}:${segundo}`;
 };
 
-//para los middlewares de ruta, que responden 401 en vez de lanzar. Un valor vacio da false:
+//para los middlewares de ruta, que responden 400 en vez de lanzar. Un valor vacio da false:
 //quien la llama es porque la fecha es obligatoria en ese punto.
 const esFechaValida = (valor) => {
     try {

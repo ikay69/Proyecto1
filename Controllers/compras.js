@@ -34,14 +34,10 @@ const comprasControllers = {
             const articulosBody = req.body.Articulos;
             const UsuIdLogin = req.usuario.Id;
 
-            //OJO con los nombres de campo: Terceros.traerPorId devuelve columnas ALIASADAS
-            //(terEstado, terTipDocId, terNumDoc, terNombres, terApellidos), no los nombres crudos
-            //de la tabla. Controllers/ventas.js lee tercero.Estado / .TipoDocumento / .Nombre /
-            //.Apellidos, que son undefined con ese modelo -- de ahi que su guard !tercero.Estado
-            //sea siempre verdadero y rechace toda venta. Aqui se usan los alias reales.
+            
             const tercero = await Terceros.traerPorId({pId:idTercero, pEmpId:idEmpresa});
             if (!tercero || !tercero.terEstado) {
-                return res.status(401).json({msg:'Tercero inválido'});
+                return res.status(400).json({msg:'Tercero inválido'});
             }
 
             let tipoDocAbreviatura = null;
@@ -60,13 +56,13 @@ const comprasControllers = {
             for (const item of articulosBody) {
                 const bodega = await Bodegas.traerPorId({pId:item.idBodega, pEmpId:idEmpresa});
                 if (!bodega || !bodega.bodEstado) {
-                    return res.status(401).json({msg:`Bodega ${item.idBodega} inválida`});
+                    return res.status(400).json({msg:`Bodega ${item.idBodega} inválida`});
                 }
 
                 if (item.ArticuloNuevo) {
                     const producto = await Productos.traerPorId({pId:item.ArticuloNuevo.idProducto, pEmpId:idEmpresa});
                     if (!producto || !producto.proEstado) {
-                        return res.status(401).json({msg:`Producto ${item.ArticuloNuevo.idProducto} inválido`});
+                        return res.status(400).json({msg:`Producto ${item.ArticuloNuevo.idProducto} inválido`});
                     }
 
                     //sin esto, un idPropiedad de otra empresa llegaria hasta
@@ -75,7 +71,7 @@ const comprasControllers = {
                     //funcion que usa el alta suelta de un articulo, para no duplicar la regla.
                     const errorPropiedades = await validarPropiedadesArticulo(idEmpresa, item.ArticuloNuevo.Propiedades);
                     if (errorPropiedades) {
-                        return res.status(401).json({msg:errorPropiedades});
+                        return res.status(400).json({msg:errorPropiedades});
                     }
 
                     articulosResueltos.push({
@@ -98,7 +94,7 @@ const comprasControllers = {
 
                 const articulo = await Articulos.traerPorId({pId:item.idArticulo, pEmpId:idEmpresa});
                 if (!articulo || !articulo.artEstado) {
-                    return res.status(401).json({msg:`Articulo ${item.idArticulo} no disponible para la compra`});
+                    return res.status(400).json({msg:`Articulo ${item.idArticulo} no disponible para la compra`});
                 }
 
                 articulosResueltos.push({
@@ -121,7 +117,7 @@ const comprasControllers = {
                 : null;
 
             //las fechas se normalizan aqui, donde ya se resuelven los demas valores confiables.
-            //normalizarFecha lanza con basura; el middleware de ruta ya la rechazo con 401, asi
+            //normalizarFecha lanza con basura; el middleware de ruta ya la rechazo con 400, asi
             //que esto es una red de seguridad que el catch convierte en 400.
             const fechaCompromiso = normalizarFecha(FechaCompromiso);
             const cuotasResueltas = Array.isArray(Cuotas)
@@ -153,7 +149,7 @@ const comprasControllers = {
             if (compraId > 0) {
                 return res.status(200).json({msg:'Compra registrada', idCompra: compraId});
             }
-            return res.status(401).json({msg:'Error registrando la compra'});
+            return res.status(400).json({msg:'Error registrando la compra'});
         } catch (error) {
             //crearCompraContado y sus funciones de calculo propagan Error planos con reglas de
             //negocio (saldo distinto de cero, articulo repetido con costos distintos): esos son
@@ -193,7 +189,7 @@ const comprasControllers = {
 
             const compra = await Compras.traerPorId({pEmpId:idEmpresa, pId:idCompra});
             if (!compra) {
-                return res.status(401).json({msg:'Compra inválida'});
+                return res.status(400).json({msg:'Compra inválida'});
             }
 
             const lineas = await CompraDetalles.traerPorCompra({pEmpId:idEmpresa, pCompraId:idCompra});
@@ -215,12 +211,12 @@ const comprasControllers = {
             const {idEmpresa, idCompra, MotivoAnulacion} = req.body;
             const UsuIdLogin = req.usuario.Id;
 
-            //se lee primero solo para distinguir "no existe" (401) de "ya estaba anulada" (400).
+            //se lee primero solo para distinguir "no existe" (400) de "ya estaba anulada" (400).
             //La decision de escribir NO depende de esta lectura: el UPDATE lleva su propio
             //AND Estado = TRUE, que es lo que cierra la carrera entre leer y escribir.
             const compra = await Compras.traerPorId({pEmpId:idEmpresa, pId:idCompra});
             if (!compra) {
-                return res.status(401).json({msg:'Compra inválida'});
+                return res.status(400).json({msg:'Compra inválida'});
             }
 
             const anulada = await anularCompra({
@@ -259,7 +255,7 @@ const comprasControllers = {
 
             const compra = await Compras.traerPorId({pEmpId:idEmpresa, pId:idCompra});
             if (!compra) {
-                return res.status(401).json({msg:'Compra inválida'});
+                return res.status(400).json({msg:'Compra inválida'});
             }
             if (!compra.compraEstado) {
                 return res.status(400).json({msg:'La compra está anulada'});
@@ -270,7 +266,7 @@ const comprasControllers = {
             //el tope superior de NumCuota es el NumeroCuotas de ESTA compra: es un dato de la
             //base, por eso se valida aqui y no en el middleware de ruta.
             if (NumCuota > compra.compraNumeroCuotas) {
-                return res.status(401).json({msg:`El número de cuota no puede superar ${compra.compraNumeroCuotas}`});
+                return res.status(400).json({msg:`El número de cuota no puede superar ${compra.compraNumeroCuotas}`});
             }
 
             const cuotaId = await CompraCuotas.crear({
@@ -292,13 +288,13 @@ const comprasControllers = {
             //traerPorId ya trae el estado y el NumeroCuotas de la compra: una consulta, no dos.
             const cuota = await CompraCuotas.traerPorId({pEmpId:idEmpresa, pId:idCuota});
             if (!cuota) {
-                return res.status(401).json({msg:'Cuota inválida'});
+                return res.status(400).json({msg:'Cuota inválida'});
             }
             if (!cuota.compraEstado) {
                 return res.status(400).json({msg:'La compra está anulada'});
             }
             if (NumCuota !== undefined && NumCuota > cuota.compraNumeroCuotas) {
-                return res.status(401).json({msg:`El número de cuota no puede superar ${cuota.compraNumeroCuotas}`});
+                return res.status(400).json({msg:`El número de cuota no puede superar ${cuota.compraNumeroCuotas}`});
             }
 
             //undefined significa "no cambiar" y llega asi hasta el modelo, que arma el SET con
@@ -326,7 +322,7 @@ const comprasControllers = {
 
             const cuota = await CompraCuotas.traerPorId({pEmpId:idEmpresa, pId:idCuota});
             if (!cuota) {
-                return res.status(401).json({msg:'Cuota inválida'});
+                return res.status(400).json({msg:'Cuota inválida'});
             }
             if (!cuota.compraEstado) {
                 return res.status(400).json({msg:'La compra está anulada'});

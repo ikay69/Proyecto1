@@ -12,33 +12,33 @@ const compraValidaDatos = async (req,res,next) => {
            ValorTransaccion, FechaCompromiso, NumeroCuotas, ValorCuota, Cuotas, Articulos} = req.body;
 
     if (!Number.isInteger(idTercero)) {
-        return res.status(401).json({msg:'Tercero inválido'});
+        return res.status(400).json({msg:'Tercero inválido'});
     }
 
     if (!TIPOS_COMPRA_VALIDOS.includes(TipoCompra)) {
-        return res.status(401).json({msg:'Tipo de compra inválido'});
+        return res.status(400).json({msg:'Tipo de compra inválido'});
     }
 
     if (NumeroDocumentoSoporte !== undefined && NumeroDocumentoSoporte !== null) {
         if (String(NumeroDocumentoSoporte).trim().length > 50) {
-            return res.status(401).json({msg:'El documento soporte supera los 50 caracteres'});
+            return res.status(400).json({msg:'El documento soporte supera los 50 caracteres'});
         }
     }
 
     if (ValorDescuento !== undefined && ValorDescuento !== null) {
         if (isNaN(Number(ValorDescuento)) || Number(ValorDescuento) < 0) {
-            return res.status(401).json({msg:'El descuento es inválido'});
+            return res.status(400).json({msg:'El descuento es inválido'});
         }
     }
 
     if (ValorEfectivo !== undefined && ValorEfectivo !== null) {
         if (isNaN(Number(ValorEfectivo)) || Number(ValorEfectivo) < 0) {
-            return res.status(401).json({msg:'El valor en efectivo es inválido'});
+            return res.status(400).json({msg:'El valor en efectivo es inválido'});
         }
     }
     if (ValorTransaccion !== undefined && ValorTransaccion !== null) {
         if (isNaN(Number(ValorTransaccion)) || Number(ValorTransaccion) < 0) {
-            return res.status(401).json({msg:'El valor en transacción es inválido'});
+            return res.status(400).json({msg:'El valor en transacción es inválido'});
         }
     }
 
@@ -47,11 +47,11 @@ const compraValidaDatos = async (req,res,next) => {
     //solo el contado tiene que salir pagado. En una compra a credito el pago inicial es
     //opcional y lo normal es que no haya ninguno: el saldo es justamente el punto.
     if (TipoCompra === 'CONTADO' && vEfectivo <= 0 && vTransaccion <= 0) {
-        return res.status(401).json({msg:'Debe registrar algún valor cancelado (efectivo o transacción)'});
+        return res.status(400).json({msg:'Debe registrar algún valor cancelado (efectivo o transacción)'});
     }
 
     //las reglas del credito NO se reescriben aqui: viven en compraCalculos.js, junto a la del
-    //contado, y este middleware solo las traduce a 401. Se llaman SIN `saldo` porque el
+    //contado, y este middleware solo las traduce a 400. Se llaman SIN `saldo` porque el
     //subtotal todavia no existe -- lo calcula el backend a partir de las lineas --, asi que la
     //regla del saldo la aplica el servicio mas adelante. Todo lo demas se atrapa aqui, antes
     //de tocar la base.
@@ -69,27 +69,27 @@ const compraValidaDatos = async (req,res,next) => {
             });
             validarCuotasCompra(Cuotas, NumeroCuotas);
         } catch (error) {
-            return res.status(401).json({msg:String(error.message || error)});
+            return res.status(40).json({msg:String(error.message || error)});
         }
     }
 
     if (!Array.isArray(Articulos) || Articulos.length === 0) {
-        return res.status(401).json({msg:'Debe registrar al menos un artículo'});
+        return res.status(400).json({msg:'Debe registrar al menos un artículo'});
     }
     //tope superior de lineas: cada linea cuesta una consulta al pool en el Controller y un lock
     //de fila de Existencias retenido hasta el commit. Mismo limite que la venta.
     if (Articulos.length > 200) {
-        return res.status(401).json({msg:'La compra no puede tener más de 200 líneas'});
+        return res.status(400).json({msg:'La compra no puede tener más de 200 líneas'});
     }
 
     for (const item of Articulos) {
         //sin este guarda, un elemento null de la lista haria estallar el acceso a item.idBodega
-        //y la ruta respondería 500 (con stack trace) en vez de un 401 de validacion.
+        //y la ruta respondería 500 (con stack trace) en vez de un 400 de validacion.
         if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-            return res.status(401).json({msg:'Línea de compra inválida'});
+            return res.status(400).json({msg:'Línea de compra inválida'});
         }
         if (!Number.isInteger(item.idBodega)) {
-            return res.status(401).json({msg:'idBodega inválido'});
+            return res.status(400).json({msg:'idBodega inválido'});
         }
 
         //cada linea compra un articulo que ya existe, O da de alta uno nuevo. Las dos cosas a la
@@ -97,34 +97,34 @@ const compraValidaDatos = async (req,res,next) => {
         const traeExistente = item.idArticulo !== undefined && item.idArticulo !== null;
         const traeNuevo = item.ArticuloNuevo !== undefined && item.ArticuloNuevo !== null;
         if (traeExistente === traeNuevo) {
-            return res.status(401).json({msg:'Cada línea debe traer idArticulo o ArticuloNuevo, no ambos'});
+            return res.status(400).json({msg:'Cada línea debe traer idArticulo o ArticuloNuevo, no ambos'});
         }
 
         if (traeExistente && !Number.isInteger(item.idArticulo)) {
-            return res.status(401).json({msg:'idArticulo inválido'});
+            return res.status(400).json({msg:'idArticulo inválido'});
         }
 
         if (traeNuevo) {
             const nuevo = item.ArticuloNuevo;
             if (typeof nuevo !== 'object' || Array.isArray(nuevo)) {
-                return res.status(401).json({msg:'ArticuloNuevo inválido'});
+                return res.status(400).json({msg:'ArticuloNuevo inválido'});
             }
             if (!Number.isInteger(nuevo.idProducto)) {
-                return res.status(401).json({msg:'idProducto inválido en ArticuloNuevo'});
+                return res.status(400).json({msg:'idProducto inválido en ArticuloNuevo'});
             }
             //mismas reglas que el alta suelta de un articulo (nombre, descripcion, propiedades),
             //reutilizadas desde Helpers/articulos.js para que no se dupliquen ni se desincronicen.
             const errorArticulo = validarDatosArticulo(nuevo);
             if (errorArticulo) {
-                return res.status(401).json({msg:errorArticulo});
+                return res.status(400).json({msg:errorArticulo});
             }
         }
 
         if (isNaN(Number(item.Cantidad)) || Number(item.Cantidad) <= 0) {
-            return res.status(401).json({msg:'Cantidad inválida'});
+            return res.status(400).json({msg:'Cantidad inválida'});
         }
         if (isNaN(Number(item.CostoUnidad)) || Number(item.CostoUnidad) <= 0) {
-            return res.status(401).json({msg:'CostoUnidad inválido'});
+            return res.status(400).json({msg:'CostoUnidad inválido'});
         }
     }
 
@@ -134,7 +134,7 @@ const compraValidaDatos = async (req,res,next) => {
 const compraValidaFiltros = async (req,res,next) => {
     const {pagina} = req.body;
     if (!Number.isInteger(pagina)) {
-        return res.status(401).json({msg:'Pagina invalida'});
+        return res.status(400).json({msg:'Pagina invalida'});
     }
     next();
 };
@@ -147,15 +147,15 @@ const compraValidaAnulacion = async (req,res,next) => {
     const {MotivoAnulacion} = req.body;
 
     if (typeof MotivoAnulacion !== 'string') {
-        return res.status(401).json({msg:'El motivo de anulación es obligatorio'});
+        return res.status(400).json({msg:'El motivo de anulación es obligatorio'});
     }
 
     const motivo = MotivoAnulacion.trim();
     if (motivo.length < MOTIVO_ANULACION_MIN) {
-        return res.status(401).json({msg:`El motivo de anulación debe tener al menos ${MOTIVO_ANULACION_MIN} caracteres`});
+        return res.status(400).json({msg:`El motivo de anulación debe tener al menos ${MOTIVO_ANULACION_MIN} caracteres`});
     }
     if (motivo.length > MOTIVO_ANULACION_MAX) {
-        return res.status(401).json({msg:`El motivo de anulación supera los ${MOTIVO_ANULACION_MAX} caracteres`});
+        return res.status(400).json({msg:`El motivo de anulación supera los ${MOTIVO_ANULACION_MAX} caracteres`});
     }
 
     next();

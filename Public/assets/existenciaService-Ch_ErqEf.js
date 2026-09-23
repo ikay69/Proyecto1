@@ -1,0 +1,1 @@
+import{h as t}from"./http-BSpazpma.js";const s={getExistencias(e){return t.post("/existencia/getexistencias",e)},getExistenciasArticulo(e){return t.post("/existencia/getexistenciasarticulo",e)}};export{s as e};

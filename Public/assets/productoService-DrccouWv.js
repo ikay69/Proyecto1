@@ -1,0 +1,1 @@
+import{h as o}from"./http-BSpazpma.js";const p={getAll(t){return o.post("/producto/getallproducto",t)},create(t){return o.post("/producto/newproducto",t)},getById(t){return o.post("/producto/getidproducto",t)},update(t){return o.put("/producto/updateproducto",t)},getActivas(t){return o.post("/producto/getactivasproducto",t)}};export{p};

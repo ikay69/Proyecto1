@@ -60,13 +60,18 @@ const Compras = {
     async traerTodo({pEmpId, pOffset}, connWrapper = pool){
         const [rows] = await connWrapper.query(
             `SELECT
-                c.Id AS compraId, c.FechaCreacion AS compraFecha, c.TerceroNombre AS compraTercero,
+                c.Id                AS compraId, 
+                c.FechaCreacion     AS compraFecha, 
+                c.TerceroNombre     AS compraTercero,
                 c.NumeroDocumentoSoporte AS compraDocumentoSoporte,
-                c.TipoCompra AS compraTipoCompra,
-                c.FechaCompromiso AS compraFechaCompromiso, c.NumeroCuotas AS compraNumeroCuotas,
-                c.ValorSubtotal AS compraSubtotal,
-                c.ValorDescuento AS compraDescuento, c.ValorCancelado AS compraCancelado,
-                c.ValorSaldo AS compraSaldo, c.Estado AS compraEstado
+                c.TipoCompra        AS compraTipoCompra,
+                c.FechaCompromiso   AS compraFechaCompromiso, 
+                c.NumeroCuotas      AS compraNumeroCuotas,
+                c.ValorSubtotal     AS compraSubtotal,
+                c.ValorDescuento    AS compraDescuento, 
+                c.ValorCancelado    AS compraCancelado,
+                c.ValorSaldo        AS compraSaldo, 
+                c.Estado            AS compraEstado
             FROM Compras c
             WHERE c.EmpresaId = ?
             ORDER BY c.FechaCreacion DESC, c.Id DESC

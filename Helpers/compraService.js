@@ -48,8 +48,11 @@ const crearCompra = async ({
     //contado exige saldo cero, el credito exige saldo positivo.
     if (esCredito) {
         validarCreditoCompra({
-            saldo, numeroCuotas: pNumeroCuotas, valorCuota: pValorCuota,
-            fechaCompromiso: pFechaCompromiso, traeCuotas
+            saldo, 
+            numeroCuotas: pNumeroCuotas,
+            valorCuota: pValorCuota,
+            fechaCompromiso: pFechaCompromiso, 
+            traeCuotas
         });
         validarCuotasCompra(cuotas, pNumeroCuotas);
     } else {
@@ -129,8 +132,11 @@ const crearCompra = async ({
         await CompraDetalles.crearVarias(connection, {
             pEmpId, pCompraId: compraId,
             lineas: lineas.map(l => ({
-                ArticuloId: l.idArticulo, BodegaId: l.idBodega, ArticuloNombre: l.ArticuloNombre,
-                Cantidad: l.Cantidad, CostoUnidad: l.CostoUnidad
+                ArticuloId: l.idArticulo, 
+                BodegaId: l.idBodega, 
+                ArticuloNombre: l.ArticuloNombre,
+                Cantidad: l.Cantidad, 
+                CostoUnidad: l.CostoUnidad
             }))
         });
 

@@ -1,0 +1,1 @@
+import{h as r}from"./http-X6urVtIc.js";const t={getAll(u){return r.post("/usuario/getuserall",u)},create(u){return r.post("/usuario/newusuer",u)},getById(u){return r.post("/usuario/getidusuario",u)},update(u){return r.put("/usuario/updateuser",u)},changePassword(u){return r.put("/usuario/changepassuser",u)}};export{t as u};

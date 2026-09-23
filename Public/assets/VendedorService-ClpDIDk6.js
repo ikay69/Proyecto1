@@ -1,0 +1,1 @@
+import{h as d}from"./http-X6urVtIc.js";const t={getAll(e){return d.post("/vendedor/getallvendedor",e)},create(e){return d.post("/vendedor/newvendedor",e)},update(e){return d.put("/vendedor/updatevendedor",e)},getById(e){return d.post("/vendedor/getidvendedor",e)}};export{t as v};

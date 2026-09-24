@@ -1,6 +1,7 @@
 //validaciones ruta
 
 import { BOLSAS_VALIDAS, TIPOS_MOVIMIENTO_VALIDOS } from './existenciaReglas.js';
+import { esFechaValida } from './fechas.js';
 
 const movimientoValidaAjuste = async (req,res,next) => {
     const {idBodega, TipoMovimiento, BolsaEstado, idPropietario, Cantidad, CostoUnitario, Observaciones} = req.body;
@@ -42,10 +43,15 @@ const movimientoValidaKardexFiltros = async (req,res,next) => {
     if (idBodega !== undefined && idBodega !== null && idBodega !== '' && !Number.isInteger(idBodega)) {
         return res.status(400).json({msg:'Bodega inválida'});
     }
-    if (!fechaInicio || isNaN(Date.parse(fechaInicio))) {
+    //esFechaValida y no Date.parse: Date.parse acepta '2026-02-31' y lo corre al 3 de marzo, y
+    //el Controller normaliza la cota superior con normalizarFechaFin, que sobre esa misma fecha
+    //lanza. Sin este filtro el usuario recibiria un 500 en vez de un 400 que le dice que la
+    //fecha que escribio no existe. Las dos siguen siendo obligatorias: un kardex sin rango
+    //recorreria la vida entera del articulo.
+    if (!esFechaValida(fechaInicio)) {
         return res.status(400).json({msg:'Fecha inicio inválida'});
     }
-    if (!fechaFin || isNaN(Date.parse(fechaFin))) {
+    if (!esFechaValida(fechaFin)) {
         return res.status(400).json({msg:'Fecha fin inválida'});
     }
     if (!Number.isInteger(pagina)) {

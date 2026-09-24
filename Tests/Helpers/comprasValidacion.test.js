@@ -293,3 +293,69 @@ test('el textoFiltro es opcional y se rechaza por encima de 100 caracteres', asy
 test('el textoFiltro cuenta los caracteres despues de recortar espacios', async () => {
     assert.equal((await correrFiltros(filtrosValidos({textoFiltro: '  ' + 'x'.repeat(100) + '  '}))).paso, true);
 });
+
+//---- el rango de fechas sobre FechaCreacion ----
+
+//las dos cotas son OPCIONALES e INDEPENDIENTES, a diferencia del kardex, donde ambas son
+//obligatorias. Aqui son un filtro mas del listado, como idTercero y textoFiltro: el cliente
+//puede pedir "desde", "hasta", las dos o ninguna.
+test('las dos fechas son opcionales e independientes', async () => {
+    assert.equal((await correrFiltros(filtrosValidos())).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({fechaInicio: '2026-09-01'}))).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({fechaFin: '2026-09-30'}))).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({fechaInicio: '2026-09-01', fechaFin: '2026-09-30'}))).paso, true);
+});
+
+//cadena vacia y null significan "sin cota", igual que un textoFiltro vacio. No son un error del
+//cliente: son la forma natural en que un formulario manda un campo de fecha que nadie lleno.
+test('una fecha vacia o nula significa sin cota, no error', async () => {
+    for (const vacio of ['', '   ', null]) {
+        assert.equal((await correrFiltros(filtrosValidos({fechaInicio: vacio}))).paso, true, `fechaInicio ${String(vacio)} debio pasar`);
+        assert.equal((await correrFiltros(filtrosValidos({fechaFin: vacio}))).paso, true, `fechaFin ${String(vacio)} debio pasar`);
+    }
+});
+
+test('rechaza una fechaInicio que no es una fecha', async () => {
+    for (const mala of ['manana', '15/09/2026', '2026-02-31', 20260901]) {
+        const {paso, res} = await correrFiltros(filtrosValidos({fechaInicio: mala}));
+        assert.equal(paso, false, `fechaInicio ${String(mala)} no debio pasar`);
+        assert.equal(res.statusCode, 400);
+        assert.match(res.cuerpo.msg, /Fecha inicio/);
+    }
+});
+
+test('rechaza una fechaFin que no es una fecha', async () => {
+    for (const mala of ['manana', '15/09/2026', '2026-13-01', 20260930]) {
+        const {paso, res} = await correrFiltros(filtrosValidos({fechaFin: mala}));
+        assert.equal(paso, false, `fechaFin ${String(mala)} no debio pasar`);
+        assert.equal(res.statusCode, 400);
+        assert.match(res.cuerpo.msg, /Fecha fin/);
+    }
+});
+
+test('rechaza un rango invertido', async () => {
+    const {paso, res} = await correrFiltros(filtrosValidos({fechaInicio: '2026-09-30', fechaFin: '2026-09-01'}));
+    assert.equal(paso, false);
+    assert.equal(res.statusCode, 400);
+    assert.match(res.cuerpo.msg, /Rango de fechas/);
+});
+
+//el mismo dia en las dos cotas es el caso mas comun del filtro ("las compras de hoy") y NO es un
+//rango invertido: la cota inferior es ese dia a las 00:00:00 y la superior a las 23:59:59.
+test('el mismo dia en las dos cotas es un rango valido', async () => {
+    assert.equal((await correrFiltros(filtrosValidos({fechaInicio: '2026-09-15', fechaFin: '2026-09-15'}))).paso, true);
+});
+
+test('acepta fechas con hora explicita y detecta el rango invertido dentro del mismo dia', async () => {
+    assert.equal((await correrFiltros(filtrosValidos({fechaInicio: '2026-09-15 08:00:00', fechaFin: '2026-09-15 18:00:00'}))).paso, true);
+
+    const {paso, res} = await correrFiltros(filtrosValidos({fechaInicio: '2026-09-15 18:00:00', fechaFin: '2026-09-15 08:00:00'}));
+    assert.equal(paso, false);
+    assert.match(res.cuerpo.msg, /Rango de fechas/);
+});
+
+//el rango solo se compara cuando llegan las DOS: con una sola cota no hay nada que invertir.
+test('una sola cota nunca es un rango invertido', async () => {
+    assert.equal((await correrFiltros(filtrosValidos({fechaInicio: '2026-09-30'}))).paso, true);
+    assert.equal((await correrFiltros(filtrosValidos({fechaFin: '2026-09-01'}))).paso, true);
+});

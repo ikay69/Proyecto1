@@ -520,6 +520,155 @@ test('un campo de orden fuera de la lista blanca cae a FechaCreacion sin llegar 
     });
 });
 
+//---- el rango de fechas sobre FechaCreacion ----
+//
+//sembrarTresCompras deja las tres en la MISMA fecha a proposito (es lo que hace determinista la
+//prueba del desempate por Id), asi que el rango necesita su propio sembrado, con tres fechas
+//distintas. Siguen en 2037 y marcadas 'ZZ' por la misma razon que las otras.
+
+const FECHA_A = '2037-03-10 08:00:00';
+const FECHA_B = '2037-03-15 12:30:00';
+const FECHA_C = '2037-03-20 23:30:00';
+
+const sembrarComprasConFechas = async (connection) => {
+    const sembradas = await sembrarTresCompras(connection);
+    const {idA, idB, idC} = sembradas;
+
+    await connection.query(`UPDATE Compras SET FechaCreacion = ? WHERE Id = ?;`, [FECHA_A, idA]);
+    await connection.query(`UPDATE Compras SET FechaCreacion = ? WHERE Id = ?;`, [FECHA_B, idB]);
+    await connection.query(`UPDATE Compras SET FechaCreacion = ? WHERE Id = ?;`, [FECHA_C, idC]);
+
+    return sembradas;
+};
+
+test('pFechaInicio trae de esa fecha en adelante, sin cota superior', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarComprasConFechas(connection);
+        const todas = [idA, idB, idC];
+
+        const desde15 = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pOrden: 'ASC', pFechaInicio: '2037-03-15 00:00:00'}, connection);
+        assert.deepEqual(soloSembradas(desde15, todas), [idB, idC]);
+    });
+});
+
+test('pFechaFin trae hasta esa fecha, sin cota inferior', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarComprasConFechas(connection);
+        const todas = [idA, idB, idC];
+
+        const hasta15 = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pOrden: 'ASC', pFechaFin: '2037-03-15 23:59:59'}, connection);
+        assert.deepEqual(soloSembradas(hasta15, todas), [idA, idB]);
+    });
+});
+
+test('las dos cotas juntas acotan el rango por los dos lados', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarComprasConFechas(connection);
+        const todas = [idA, idB, idC];
+
+        //el dia completo del 15: es el caso que el Controller construye con fechaInicio y
+        //fechaFin iguales y sin hora.
+        const soloEl15 = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pFechaInicio: '2037-03-15 00:00:00', pFechaFin: '2037-03-15 23:59:59'}, connection);
+        assert.deepEqual(soloSembradas(soloEl15, todas), [idB]);
+
+        const rangoVacio = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pFechaInicio: '2037-03-11 00:00:00', pFechaFin: '2037-03-14 23:59:59'}, connection);
+        assert.deepEqual(soloSembradas(rangoVacio, todas), []);
+    });
+});
+
+//las dos cotas son INCLUSIVAS (>= y <=). Con `>` la compra que cae justo en el instante de la
+//cota desapareceria, que es el defecto que la gente reporta como "no me salen las de ese dia".
+test('las dos cotas son inclusivas', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarComprasConFechas(connection);
+        const todas = [idA, idB, idC];
+
+        const desdeExacta = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pOrden: 'ASC', pFechaInicio: FECHA_B}, connection);
+        assert.ok(soloSembradas(desdeExacta, todas).includes(idB), 'la cota inferior debe incluir su propio instante');
+
+        const hastaExacta = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pOrden: 'ASC', pFechaFin: FECHA_B}, connection);
+        assert.ok(soloSembradas(hastaExacta, todas).includes(idB), 'la cota superior debe incluir su propio instante');
+    });
+});
+
+//el contrato anterior a este filtro: quien no manda fechas recibe lo mismo que recibia antes.
+test('sin fechas el listado no cambia', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarComprasConFechas(connection);
+        const todas = [idA, idB, idC];
+
+        const sinCotas = await Compras.traerTodo({pEmpId: 1, pOffset: 0, pOrden: 'ASC'}, connection);
+        assert.deepEqual(soloSembradas(sinCotas, todas), [idA, idB, idC]);
+
+        const conNulos = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pOrden: 'ASC', pFechaInicio: null, pFechaFin: null}, connection);
+        assert.deepEqual(soloSembradas(conNulos, todas), [idA, idB, idC]);
+    });
+});
+
+//el rango va sobre FechaCreacion se ordene por donde se ordene, a diferencia del textoFiltro,
+//que filtra por la columna de orden.
+test('el rango se aplica con cualquier campo de orden', async () => {
+    await withRollback(async (connection) => {
+        const {idA, idB, idC} = await sembrarComprasConFechas(connection);
+        const todas = [idA, idB, idC];
+
+        for (const pCampoOrden of ['NumeroDocumentoSoporte', 'TerceroTipoDoc', 'TerceroNumeroDoc', 'TerceroNombre', 'FechaCreacion']) {
+            const filas = await Compras.traerTodo(
+                {pEmpId: 1, pOffset: 0, pCampoOrden, pFechaInicio: '2037-03-15 00:00:00', pFechaFin: '2037-03-15 23:59:59'}, connection);
+            assert.deepEqual(soloSembradas(filas, todas), [idB],
+                `el rango debio aplicarse ordenando por ${pCampoOrden}`);
+        }
+    });
+});
+
+//el mismo defecto que fija la prueba de arriba de contarTodo, ahora con las dos cotas nuevas:
+//si el rango se le pone al listado y no al conteo, cantData deja de cuadrar.
+test('contarTodo aplica tambien el rango de fechas', async () => {
+    await withRollback(async (connection) => {
+        const {terceroA} = await sembrarComprasConFechas(connection);
+
+        for (const filtros of [
+            {pFechaInicio: '2037-03-15 00:00:00'},
+            {pFechaFin: '2037-03-15 23:59:59'},
+            {pFechaInicio: '2037-03-01 00:00:00', pFechaFin: '2037-03-31 23:59:59'},
+            {pFechaInicio: '2037-03-11 00:00:00', pFechaFin: '2037-03-14 23:59:59'},
+            {pFechaInicio: '2037-03-01 00:00:00', pFechaFin: '2037-03-31 23:59:59', pTerceroId: terceroA},
+            {pFechaInicio: '2037-03-01 00:00:00', pFechaFin: '2037-03-31 23:59:59', pCampoOrden: 'TerceroNombre', pTexto: '%ZZ %'}
+        ]) {
+            const total = await Compras.contarTodo({pEmpId: 1, ...filtros}, connection);
+            const filas = await Compras.traerTodo({pEmpId: 1, pOffset: 0, ...filtros}, connection);
+            assert.equal(Number(total), filas.length,
+                `el conteo y el listado no cuadran para ${JSON.stringify(filtros)}`);
+        }
+    });
+});
+
+test('el rango se combina con el filtro de tercero y con el de texto', async () => {
+    await withRollback(async (connection) => {
+        const {terceroA, idA, idB, idC} = await sembrarComprasConFechas(connection);
+        const todas = [idA, idB, idC];
+
+        //marzo entero del tercero A: A y B, no C (que es del tercero B)
+        const marzoDeA = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pOrden: 'ASC', pTerceroId: terceroA,
+             pFechaInicio: '2037-03-01 00:00:00', pFechaFin: '2037-03-31 23:59:59'}, connection);
+        assert.deepEqual(soloSembradas(marzoDeA, todas), [idA, idB]);
+
+        //el texto casa con las tres, pero el rango deja solo la del 10
+        const conTexto = await Compras.traerTodo(
+            {pEmpId: 1, pOffset: 0, pCampoOrden: 'TerceroNombre', pTexto: '%ZZ %',
+             pFechaFin: '2037-03-12 23:59:59'}, connection);
+        assert.deepEqual(soloSembradas(conTexto, todas), [idA]);
+    });
+});
+
 test('traerTodo expone el tercero completo para las columnas por las que se puede ordenar', async () => {
     await withRollback(async (connection) => {
         const {terceroA, idA} = await sembrarTresCompras(connection);

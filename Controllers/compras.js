@@ -8,7 +8,7 @@ import CompraDetalles from '../Models/compraDetalles.js';
 import CompraCuotas from '../Models/compraCuotas.js';
 import { crearCompra, anularCompra } from '../Helpers/compraService.js';
 import { validarPropiedadesArticulo } from '../Helpers/propiedadesValidacion.js';
-import { normalizarFecha } from '../Helpers/fechas.js';
+import { normalizarFecha, normalizarFechaFin } from '../Helpers/fechas.js';
 
 //mismo criterio que el catch de `crear`: un Error plano de este modulo trae reglas de negocio y
 //es culpa del cliente (400); un error del driver mysql2 trae code/sqlState y es del servidor
@@ -167,7 +167,7 @@ const comprasControllers = {
 
     listarTodas: async (req,res) => {
         try {
-            const {idEmpresa, campoOrdenar, orden, pagina, textoFiltro, idTercero} = req.body;
+            const {idEmpresa, campoOrdenar, orden, pagina, textoFiltro, idTercero, fechaInicio, fechaFin} = req.body;
 
             let vPagina = Number(pagina);
 
@@ -213,10 +213,23 @@ const comprasControllers = {
             //ausente, 0 o negativo = todos los terceros. La ruta ya rechazo null y los no enteros.
             const vTerceroId = Number.isInteger(idTercero) && idTercero > 0 ? idTercero : 0;
 
+            //el rango va sobre FechaCreacion y se aplica ordene por donde ordene el listado: no
+            //se desactiva con campoOrdenar 5 como si hace el textoFiltro.
+            //
+            //Las dos cotas son opcionales e independientes: null es "sin cota por ese lado".
+            //normalizarFecha deja un dia suelto en 00:00:00 y normalizarFechaFin en 23:59:59,
+            //asi que mandar la misma fecha en las dos trae ese dia completo. compraValidaFiltros
+            //ya rechazo lo que no sea una fecha y el rango invertido, asi que aqui no lanza.
+            //el trim importa: un formulario manda '   ' por un campo que nadie lleno, y eso es
+            //"sin cota" -- es lo que decidio compraValidaFiltros --, no una fecha que normalizar.
+            const vFechaInicio = String(fechaInicio ?? '').trim() ? normalizarFecha(fechaInicio) : null;
+            const vFechaFin    = String(fechaFin    ?? '').trim() ? normalizarFechaFin(fechaFin) : null;
+
             //contarTodo y traerTodo reciben EXACTAMENTE los mismos filtros: si se separan,
             //cantData deja de corresponder con las paginas que devuelve el listado.
             const cantCompras = await Compras.contarTodo({
-                pEmpId:idEmpresa, pCampoOrden:vCampoOrdenar, pTexto:vTextoFiltro, pTerceroId:vTerceroId
+                pEmpId:idEmpresa, pCampoOrden:vCampoOrdenar, pTexto:vTextoFiltro, pTerceroId:vTerceroId,
+                pFechaInicio:vFechaInicio, pFechaFin:vFechaFin
             });
             const maxPagina = Math.max(1, Math.ceil(cantCompras/50));
             vPagina = Math.min(Math.max(vPagina,1), maxPagina);
@@ -224,7 +237,8 @@ const comprasControllers = {
 
             const compras = await Compras.traerTodo({
                 pEmpId:idEmpresa, pOffset:vOffset, pCampoOrden:vCampoOrdenar, pOrden:vOrden,
-                pTexto:vTextoFiltro, pTerceroId:vTerceroId
+                pTexto:vTextoFiltro, pTerceroId:vTerceroId,
+                pFechaInicio:vFechaInicio, pFechaFin:vFechaFin
             });
 
             return res.status(200).json({cantData:cantCompras, data:compras});

@@ -4,21 +4,13 @@ import Terceros from '../Models/terceros.js';
 import Bodegas from '../Models/bodegas.js';
 import { registrarMovimientoTransaccional } from '../Helpers/inventarioTransacciones.js';
 
-const SOLO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
-
 //el kardex filtra con BETWEEN sobre un TIMESTAMP: una fechaFin solo-fecha ('2026-09-15') es
-//medianoche y dejaria fuera todos los movimientos de ese mismo dia, asi que se lleva al final
-//del dia. Se construye con la hora explicita y NO con new Date('2026-09-15'), porque una cadena
-//solo-fecha se parsea como UTC: en una zona con offset negativo (America/Bogota) el Date
-//resultante caeria en el dia anterior y el rango quedaria invertido. Cualquier otro formato se
-//deja tal cual llego: si el cliente mando una hora, es una cota que eligio a proposito.
-const normalizarFechaFin = (fechaFin) => {
-    const texto = String(fechaFin ?? '').trim();
-    if (!SOLO_FECHA.test(texto)) return fechaFin;
-
-    const vFechaFin = new Date(`${texto}T23:59:59.999`);
-    return isNaN(vFechaFin.getTime()) ? fechaFin : vFechaFin;
-};
+//medianoche y dejaria fuera todos los movimientos de ese mismo dia, asi que normalizarFechaFin
+//la lleva al final del dia. Vive en Helpers/fechas.js, compartida con el rango del listado de
+//Compras: la sutileza que resuelve --una cadena solo-fecha se parsea como UTC, y en una zona con
+//offset negativo como America/Bogota el dia se corre hacia atras-- no debe estar escrita dos veces.
+//movimientoValidaKardexFiltros ya rechazo con 400 lo que no sea una fecha, asi que aqui no lanza.
+import { normalizarFechaFin } from '../Helpers/fechas.js';
 
 const movimientosControllers = {
     crearAjuste: async (req,res) => {

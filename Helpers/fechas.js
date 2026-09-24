@@ -46,6 +46,30 @@ const normalizarFecha = (valor) => {
     return `${anio}-${mes}-${dia} ${hora}:${minuto}:${segundo}`;
 };
 
+//true solo si la cadena es 'YYYY-MM-DD' pelada. RE_FECHA no lleva /g, asi que exec no arrastra
+//estado entre llamadas: el grupo 4 es la hora, y solo queda undefined cuando no venia ninguna.
+const esSoloFecha = (texto) => {
+    const partes = RE_FECHA.exec(texto);
+    return partes !== null && partes[4] === undefined;
+};
+
+//la cota SUPERIOR de un rango de fechas. Una fecha sin hora es medianoche, asi que comparada
+//contra un TIMESTAMP con `<=` dejaria fuera todo lo ocurrido ese mismo dia: se lleva al ultimo
+//segundo que la columna puede guardar. Si el valor ya trae hora -- o es un Date, que siempre la
+//trae --, se respeta tal cual: es una cota que el cliente eligio a proposito.
+//
+//La cota INFERIOR no necesita funcion aparte: normalizarFecha ya deja 'YYYY-MM-DD' en
+//00:00:00, que es justo el principio de ese dia.
+const normalizarFechaFin = (valor) => {
+    const normalizada = normalizarFecha(valor);
+    if (normalizada === null) return null;
+
+    if (typeof valor === 'string' && esSoloFecha(valor.trim())) {
+        return `${normalizada.slice(0, 10)} 23:59:59`;
+    }
+    return normalizada;
+};
+
 //para los middlewares de ruta, que responden 400 en vez de lanzar. Un valor vacio da false:
 //quien la llama es porque la fecha es obligatoria en ese punto.
 const esFechaValida = (valor) => {
@@ -56,4 +80,4 @@ const esFechaValida = (valor) => {
     }
 };
 
-export { normalizarFecha, esFechaValida };
+export { normalizarFecha, normalizarFechaFin, esFechaValida };

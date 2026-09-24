@@ -7,7 +7,7 @@ import { pool } from '../Database/config.js';
 //pero envuelve la columna en algo que el optimizador no puede evaluar al planear y deja de usar
 //el indice. Misma decision, y por la misma razon, que el filtro de vendedor de Models/ventas.js.
 //
-//Los TRES de abajo los comparten traerTodo y contarTodo: si se separan, cantData y las paginas
+//TODOS los de abajo los comparten traerTodo y contarTodo: si se separan, cantData y las paginas
 //dejan de cuadrar. Hay pruebas que lo fijan.
 
 //0, ausente o cualquier valor que no sea un id positivo trae las compras de todos los terceros.
@@ -25,6 +25,22 @@ const filtroTercero = (pTerceroId) => {
 const filtroTexto = (pCampoOrden, pTexto) => {
     if (!pTexto || pTexto === '%%') return {sql: '', params: []};
     return {sql: `AND c.${pCampoOrden} LIKE ?`, params: [pTexto]};
+};
+
+//las dos cotas del rango son opcionales e INDEPENDIENTES, asi que no se puede usar un BETWEEN:
+//cada una entra por su lado, o no entra. Ambas son INCLUSIVAS (>= y <=); el llamador es quien
+//decide que hora lleva cada extremo -- Helpers/fechas.js deja 'YYYY-MM-DD' en 00:00:00 para la
+//inferior y en 23:59:59 para la superior, de modo que un dia suelto cubre el dia entero.
+//
+//Ninguna funcion envuelve la columna: FechaCreacion queda desnuda a un lado de la comparacion,
+//que es lo unico que deja usar idx_compras_listado (EmpresaId, FechaCreacion). Un
+//DATE(c.FechaCreacion) = ? seria mas corto de escribir y obligaria a recorrer la tabla entera.
+const filtroFechas = (pFechaInicio, pFechaFin) => {
+    const sql = [];
+    const params = [];
+    if (pFechaInicio) { sql.push('AND c.FechaCreacion >= ?'); params.push(pFechaInicio); }
+    if (pFechaFin)    { sql.push('AND c.FechaCreacion <= ?'); params.push(pFechaFin); }
+    return {sql: sql.join(' '), params};
 };
 
 //el nombre de una columna no se puede parametrizar: pCampoOrden llega al ORDER BY interpolado.
@@ -100,11 +116,12 @@ const Compras = {
     //las pruebas que corren dentro de withRollback le pasan la conexion de su propia
     //transaccion, porque de lo contrario el pool (otra conexion) jamas veria filas todavia sin
     //confirmar.
-    async traerTodo({pEmpId, pOffset, pCampoOrden = 'FechaCreacion', pOrden = 'DESC', pTexto = '%%', pTerceroId = 0}, connWrapper = pool){
+    async traerTodo({pEmpId, pOffset, pCampoOrden = 'FechaCreacion', pOrden = 'DESC', pTexto = '%%', pTerceroId = 0, pFechaInicio = null, pFechaFin = null}, connWrapper = pool){
         const campo   = columnaOrden(pCampoOrden);
         const sentido = sentidoOrden(pOrden);
         const tercero = filtroTercero(pTerceroId);
         const texto   = filtroTexto(campo, pTexto);
+        const fechas  = filtroFechas(pFechaInicio, pFechaFin);
 
         const [rows] = await connWrapper.query(
             `SELECT
@@ -127,27 +144,30 @@ const Compras = {
             WHERE c.EmpresaId = ?
             ${tercero.sql}
             ${texto.sql}
+            ${fechas.sql}
             ORDER BY c.${campo} ${sentido}, c.Id ${sentido}
             LIMIT 50 OFFSET ?;`,
-            [pEmpId, ...tercero.params, ...texto.params, pOffset]
+            [pEmpId, ...tercero.params, ...texto.params, ...fechas.params, pOffset]
         );
         return rows || [];
     },
 
-    //mismo WHERE que traerTodo, con los mismos tres filtros. No lleva ORDER BY: sobre un
+    //mismo WHERE que traerTodo, con exactamente los mismos filtros. No lleva ORDER BY: sobre un
     //COUNT(*) no cambia nada.
-    async contarTodo({pEmpId, pCampoOrden = 'FechaCreacion', pTexto = '%%', pTerceroId = 0}, connWrapper = pool){
+    async contarTodo({pEmpId, pCampoOrden = 'FechaCreacion', pTexto = '%%', pTerceroId = 0, pFechaInicio = null, pFechaFin = null}, connWrapper = pool){
         const campo   = columnaOrden(pCampoOrden);
         const tercero = filtroTercero(pTerceroId);
         const texto   = filtroTexto(campo, pTexto);
+        const fechas  = filtroFechas(pFechaInicio, pFechaFin);
 
         const [rows] = await connWrapper.query(
             `SELECT COUNT(*) AS total
             FROM Compras c
             WHERE c.EmpresaId = ?
             ${tercero.sql}
-            ${texto.sql};`,
-            [pEmpId, ...tercero.params, ...texto.params]
+            ${texto.sql}
+            ${fechas.sql};`,
+            [pEmpId, ...tercero.params, ...texto.params, ...fechas.params]
         );
         return rows[0].total;
     },

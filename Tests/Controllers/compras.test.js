@@ -624,6 +624,137 @@ test('listarTodas ajusta una pagina fuera de rango en vez de devolver vacio', as
     }
 });
 
+//---- listarTodas: el rango de fechas ----
+//
+//El fixture esta elegido para atacar los dos bordes del dia: idA cae en la medianoche EXACTA del
+//15 y idB en su ULTIMO segundo. Una cota superior sin normalizar ('2037-03-15' = medianoche)
+//dejaria fuera a idB, que es el defecto que este filtro existe para no tener.
+
+const FECHAS_BORDE = ['2037-03-15 00:00:00', '2037-03-15 23:59:59', '2037-03-16 10:00:00'];
+
+const sembrarComprasConFechas = async () => {
+    const ctx = await sembrarComprasListado();
+    const ids = [ctx.idA, ctx.idB, ctx.idC];
+    for (let i = 0; i < ids.length; i++) {
+        await pool.query(`UPDATE Compras SET FechaCreacion = ? WHERE Id = ?;`, [FECHAS_BORDE[i], ids[i]]);
+    }
+    return ctx;
+};
+
+//LA prueba de este filtro: una fechaFin de un dia suelto tiene que cubrir el dia entero.
+test('listarTodas con fechaFin de un dia suelto incluye las compras de ese mismo dia', async () => {
+    const ctx = await sembrarComprasConFechas();
+    try {
+        const hastaEl15 = await listar({
+            idEmpresa: 1, campoOrdenar: 5, orden: 'ASC', pagina: 1, fechaFin: '2037-03-15'
+        });
+        assert.equal(hastaEl15.statusCode, 200, JSON.stringify(hastaEl15.body));
+        assert.deepEqual(idsSembrados(hastaEl15, ctx.ids), [ctx.idA, ctx.idB],
+            'la compra de las 23:59:59 del 15 debe entrar: la cota superior es el final del dia');
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+//la otra mitad: la cota inferior arranca en 00:00:00, no en la hora en que se pidio el listado.
+test('listarTodas con fechaInicio de un dia suelto arranca en la medianoche de ese dia', async () => {
+    const ctx = await sembrarComprasConFechas();
+    try {
+        const desdeEl15 = await listar({
+            idEmpresa: 1, campoOrdenar: 5, orden: 'ASC', pagina: 1, fechaInicio: '2037-03-15'
+        });
+        assert.deepEqual(idsSembrados(desdeEl15, ctx.ids), [ctx.idA, ctx.idB, ctx.idC],
+            'la compra de la medianoche exacta del 15 debe entrar');
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas con las dos fechas en el mismo dia trae ese dia completo, y cantData lo acompaña', async () => {
+    const ctx = await sembrarComprasConFechas();
+    try {
+        const elDia15 = await listar({
+            idEmpresa: 1, campoOrdenar: 5, orden: 'ASC', pagina: 1,
+            fechaInicio: '2037-03-15', fechaFin: '2037-03-15'
+        });
+        assert.deepEqual(idsSembrados(elDia15, ctx.ids), [ctx.idA, ctx.idB]);
+        assert.equal(Number(elDia15.body.cantData), elDia15.body.data.length,
+            'cantData debe corresponder al rango, no al total de la empresa');
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas respeta una hora explicita en vez de estirarla al dia', async () => {
+    const ctx = await sembrarComprasConFechas();
+    try {
+        const hastaMediodia = await listar({
+            idEmpresa: 1, campoOrdenar: 5, orden: 'ASC', pagina: 1,
+            fechaInicio: '2037-03-15', fechaFin: '2037-03-15 12:00:00'
+        });
+        assert.deepEqual(idsSembrados(hastaMediodia, ctx.ids), [ctx.idA],
+            'con hora explicita la cota es la que mando el cliente, no el final del dia');
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+//a diferencia del textoFiltro, que se desactiva con campoOrdenar 5, el rango va siempre sobre
+//FechaCreacion: ordenar por otra columna no debe apagarlo.
+test('listarTodas aplica el rango con cualquier campoOrdenar', async () => {
+    const ctx = await sembrarComprasConFechas();
+    try {
+        for (const campoOrdenar of [1, 2, 3, 4, 5]) {
+            const res = await listar({
+                idEmpresa: 1, campoOrdenar, orden: 'ASC', pagina: 1,
+                fechaInicio: '2037-03-16', fechaFin: '2037-03-16'
+            });
+            assert.deepEqual(idsSembrados(res, ctx.ids), [ctx.idC],
+                `el rango debio aplicarse con campoOrdenar ${campoOrdenar}`);
+        }
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas sin fechas, o con fechas vacias, no filtra por rango', async () => {
+    const ctx = await sembrarComprasConFechas();
+    try {
+        const sinFechas = await listar({idEmpresa: 1, campoOrdenar: 5, orden: 'ASC', pagina: 1});
+        assert.deepEqual(idsSembrados(sinFechas, ctx.ids), [ctx.idA, ctx.idB, ctx.idC]);
+
+        //un formulario que no lleno los campos manda cadenas vacias: es "sin cota", no un error
+        const vacias = await listar({
+            idEmpresa: 1, campoOrdenar: 5, orden: 'ASC', pagina: 1, fechaInicio: '', fechaFin: ''
+        });
+        assert.deepEqual(idsSembrados(vacias, ctx.ids), [ctx.idA, ctx.idB, ctx.idC]);
+        assert.equal(Number(sinFechas.body.cantData), Number(vacias.body.cantData));
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
+test('listarTodas combina el rango con el filtro de tercero', async () => {
+    const ctx = await sembrarComprasConFechas();
+    try {
+        //idA y idB son del tercero A; el 15 completo acotado al tercero B no devuelve nada
+        const vacio = await listar({
+            idEmpresa: 1, campoOrdenar: 5, orden: 'ASC', pagina: 1, idTercero: ctx.terceroB,
+            fechaInicio: '2037-03-15', fechaFin: '2037-03-15'
+        });
+        assert.deepEqual(idsSembrados(vacio, ctx.ids), []);
+        assert.equal(Number(vacio.body.cantData), vacio.body.data.length);
+
+        const conAmbos = await listar({
+            idEmpresa: 1, campoOrdenar: 5, orden: 'ASC', pagina: 1, idTercero: ctx.terceroA,
+            fechaInicio: '2037-03-15', fechaFin: '2037-03-16'
+        });
+        assert.deepEqual(idsSembrados(conAmbos, ctx.ids), [ctx.idA, ctx.idB]);
+    } finally {
+        for (const id of ctx.ids) await borrarCompra(id);
+    }
+});
+
 test('listarTodas no alcanza las compras de otra empresa', async () => {
     const ctx = await sembrarComprasListado();
     try {

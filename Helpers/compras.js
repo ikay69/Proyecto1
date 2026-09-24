@@ -2,6 +2,7 @@
 
 import { validarDatosArticulo } from './articulos.js';
 import { validarCreditoCompra, validarCuotasCompra } from './compraCalculos.js';
+import { normalizarFecha, normalizarFechaFin } from './fechas.js';
 
 const TIPOS_COMPRA_VALIDOS = ['CONTADO', 'CREDITO'];
 const MOTIVO_ANULACION_MIN = 5;
@@ -131,8 +132,20 @@ const compraValidaDatos = async (req,res,next) => {
     next();
 };
 
+//las dos cotas del rango de fechas son OPCIONALES e INDEPENDIENTES: ausente, vacia o null es
+//"sin cota por ese lado". Devuelve la fecha ya normalizada a 'YYYY-MM-DD HH:MM:SS' o null, y
+//lanza si el valor es basura, para que el llamador responda 400 con el nombre del campo.
+//
+//No se valida con Date.parse -- como hace el kardex -- porque Date.parse acepta '2026-02-31' y
+//lo corre al 3 de marzo: normalizarFecha lo rechaza.
+const cotaDelRango = (valor, normalizador) => {
+    if (valor === undefined || valor === null) return null;
+    if (typeof valor === 'string' && valor.trim().length === 0) return null;
+    return normalizador(valor);
+};
+
 const compraValidaFiltros = async (req,res,next) => {
-    const {campoOrdenar, pagina, textoFiltro, idTercero} = req.body;
+    const {campoOrdenar, pagina, textoFiltro, idTercero, fechaInicio, fechaFin} = req.body;
 
     if (!Number.isInteger(pagina)) {
         return res.status(400).json({msg:'Pagina invalida'});
@@ -163,6 +176,31 @@ const compraValidaFiltros = async (req,res,next) => {
         if (String(textoFiltro).trim().length > 100) {
             return res.status(400).json({msg:'Texto de filtro supera los 100 caracteres'});
         }
+    }
+
+    //el rango filtra por FechaCreacion y se aplica ordene por donde ordene el listado, a
+    //diferencia del textoFiltro, que se desactiva con campoOrdenar: 5.
+    let vFechaInicio;
+    try {
+        vFechaInicio = cotaDelRango(fechaInicio, normalizarFecha);
+    } catch {
+        return res.status(400).json({msg:'Fecha inicio inválida'});
+    }
+
+    //la cota superior se lleva al final del dia cuando viene sin hora: 'YYYY-MM-DD' es
+    //medianoche y dejaria fuera las compras de ese mismo dia.
+    let vFechaFin;
+    try {
+        vFechaFin = cotaDelRango(fechaFin, normalizarFechaFin);
+    } catch {
+        return res.status(400).json({msg:'Fecha fin inválida'});
+    }
+
+    //solo hay rango que invertir cuando llegan las dos. Se comparan YA normalizadas, asi que
+    //el mismo dia en ambas cotas (00:00:00 contra 23:59:59) es valido: es el caso mas comun del
+    //filtro. Las cadenas 'YYYY-MM-DD HH:MM:SS' se ordenan alfabeticamente igual que en el tiempo.
+    if (vFechaInicio !== null && vFechaFin !== null && vFechaInicio > vFechaFin) {
+        return res.status(400).json({msg:'Rango de fechas inválido'});
     }
 
     next();

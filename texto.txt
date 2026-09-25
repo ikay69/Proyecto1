@@ -1,1 +1,36 @@
 
+dentro de D:\Users\user\Documents\Programacion\Proyectos\joyeriaNFCompraVenta\frontend\src\views\Inventario\Articulos crear una pantalla llamada ArticulosVendibles tendra el mismo funcionamiento que D:\Users\user\Documents\Programacion\Proyectos\joyeriaNFCompraVenta\frontend\src\views\Inventario\Articulos\ArticulosSeleccionar.vue solo que esta vez consultara la petición:
+
+Petición: post
+Ruta: http://localhost:3000/api/articulo/getvendiblesarticulo
+Header:{token:”asdf”}
+Body: {
+  "idEmpresa": {{idEmpresa}},
+  "idBodega": null,  // null o numero entero mayor a cero
+  "campoOrdenar": 2, // 1: nombre, 2: codigo sku, 3: descripcion, 4:fecha creacion
+  "orden": "ASC",
+  "pagina": 1,
+  "textoFiltro": "ART00001417"
+}
+Respuesta: {
+    "cantData": 1,
+    "data": [
+        {
+            "artId": 1417,
+            "artNombre": "ANILLO ORO 18K TALLA 7",
+            "artSKU": "ART00001417",
+            "artPrecio": "850000.00",
+            "artBodegaId": 1,
+            "artBodegaNombre": "PRINCIPAL",
+            "artCantidadDisponible": "1.00"
+        }
+    ]
+}
+
+Los datos están paginados por lado del servidor, se dividen en 50 registros, para indicar la página esa el campo pagina que es numérico, el campo cantData muestra cuantos registros hay en total con los filtros que aplico.
+La empresa es obligatoria, el campoOrdenar es tipo numérico y tiene tres valores 1 (Nombre), 2 (SKU), 3 (Descripción) y 4 (Fecha de creación), si selecciona el 4 ordena los registros por fecha y no importa lo que escriba en el textoFiltro, si selecciona otra opción diferente a fecha de creación, buscara los registros que tengan en la columna que selecciono en campoOrden, los caracteres que estén escritos en textoFiltro.
+El textoFiltro tiene un máximo de 150 caracteres, el campo orden tiene dos valores DESC y ASC que son descendente y ascendente
+Acá trae todos los artículos que estén activos, a demás que sean para vender, que tengan existencias disponibles mayores a cero y sean propias.
+
+
+llamarlo en D:\Users\user\Documents\Programacion\Proyectos\joyeriaNFCompraVenta\frontend\src\views\Ventas\Ventas.vue asi como esta tercero y articulos, esto se hace para tener futuras referencias
